@@ -61,25 +61,42 @@ struct ContentView: View {
         }
     }
     
+//    func loadFileContent() {
+//        DispatchQueue.global(qos: .userInitiated).async {
+//            if let filePath = Bundle.main.path(forResource: "cinderella", ofType: "txt") {
+//                do {
+//                    let content = try String(contentsOfFile: filePath, encoding: .utf8)
+//                    DispatchQueue.main.async {
+//                        self.fileContent = content
+//                        self.dialogue = self.extractDialogue(from: content)
+//                    }
+//                } catch {
+//                    DispatchQueue.main.async {
+//                        self.fileContent = "Error loading file content."
+//                    }
+//                }
+//            } else {
+//                DispatchQueue.main.async {
+//                    self.fileContent = "File not found."
+//                }
+//            }
+//        }
+//    }
+
     func loadFileContent() {
-        DispatchQueue.global(qos: .userInitiated).async {
-            if let filePath = Bundle.main.path(forResource: "cinderella", ofType: "txt") {
-                do {
-                    let content = try String(contentsOfFile: filePath, encoding: .utf8)
-                    DispatchQueue.main.async {
-                        self.fileContent = content
-                        self.dialogue = self.extractDialogue(from: content)
-                    }
-                } catch {
-                    DispatchQueue.main.async {
-                        self.fileContent = "Error loading file content."
-                    }
-                }
-            } else {
-                DispatchQueue.main.async {
-                    self.fileContent = "File not found."
-                }
+        if let filePath = Bundle.main.path(forResource: "cinderella", ofType: "txt") {
+            do {
+                let content = try String(contentsOfFile: filePath, encoding: .utf8)
+                self.fileContent = content
+                self.dialogue = self.extractDialogue(from: content)
+                print("✅ File loaded successfully.")
+            } catch {
+                self.fileContent = "Error loading file content."
+                print("❌ Error loading file content: \(error.localizedDescription)")
             }
+        } else {
+            self.fileContent = "File not found."
+            print("❌ File not found in bundle.")
         }
     }
     
@@ -101,9 +118,12 @@ struct ContentView: View {
     
     func initializeSpeech() {
         loadFileContent()
-        if !dialogue.isEmpty {
-            currentUtteranceIndex = 0
+        if !self.dialogue.isEmpty {
+            self.currentUtteranceIndex = 0
             startSpeaking()
+        }
+        else {
+            print("No dialog")
         }
     }
     
@@ -120,22 +140,59 @@ struct ContentView: View {
         }
     }
     
+//    func startSpeaking() {
+//        guard currentUtteranceIndex < dialogue.count else {
+//            isSpeaking = false
+//            return
+//        }
+//
+//        let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
+//            speakNextUtterance()
+//        }
+//        speechDelegate = delegate
+//        synthesizer.delegate = delegate
+//
+//        isSpeaking = true
+//        speakNextUtterance()
+//    }
+    
     func startSpeaking() {
         guard currentUtteranceIndex < dialogue.count else {
             isSpeaking = false
             return
         }
 
-        let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
-            speakNextUtterance()
+        let entry = dialogue[currentUtteranceIndex]
+        let utterance = AVSpeechUtterance(string: entry.line)
+        
+        // Try to get a specific voice; fallback to default if unavailable
+        if let voice = AVSpeechSynthesisVoice(language: "en-US") {
+            utterance.voice = voice
+        } else {
+            print("⚠️ 'en-US' voice not available. Using default voice.")
         }
-        speechDelegate = delegate
-        synthesizer.delegate = delegate
 
-        isSpeaking = true
-        speakNextUtterance()
+        utterance.postUtteranceDelay = 1.0
+
+        synthesizer.speak(utterance)
+        currentUtteranceIndex += 1
     }
 
+//    func speakNextUtterance() {
+//        guard currentUtteranceIndex < dialogue.count else {
+//            isSpeaking = false
+//            return
+//        }
+//
+//        let entry = dialogue[currentUtteranceIndex]
+//        let utterance = AVSpeechUtterance(string: entry.line)
+//        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+//        utterance.postUtteranceDelay = 1.0
+//
+//        synthesizer.speak(utterance)
+//        currentUtteranceIndex += 1
+//    }
+    
     func speakNextUtterance() {
         guard currentUtteranceIndex < dialogue.count else {
             isSpeaking = false
@@ -144,7 +201,14 @@ struct ContentView: View {
 
         let entry = dialogue[currentUtteranceIndex]
         let utterance = AVSpeechUtterance(string: entry.line)
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+        
+        // Try to get a specific voice; fallback to default if unavailable
+        if let voice = AVSpeechSynthesisVoice(language: "en-US") {
+            utterance.voice = voice
+        } else {
+            print("⚠️ 'en-US' voice not available. Using default voice.")
+        }
+
         utterance.postUtteranceDelay = 1.0
 
         synthesizer.speak(utterance)
