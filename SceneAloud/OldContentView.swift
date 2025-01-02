@@ -16,69 +16,67 @@
 //    @State private var speechDelegate: AVSpeechSynthesizerDelegateWrapper? // Hold strong reference
 //    
 //    var body: some View {
-//        VStack {
-//            if dialogue.isEmpty {
-//                Text("Loading content...")
-//                    .padding()
-//            } else {
-//                ScrollView {
-//                    VStack(alignment: .leading) {
-//                        ForEach(dialogue, id: \.line) { entry in
-//                            VStack(alignment: .leading, spacing: 4) {
-//                                Text(entry.character) // Display character name
-//                                    .font(.headline)
-//                                    .foregroundColor(.white) // White text
-//                                
-//                                Text(entry.line) // Display line
-//                                    .padding(5)
-//                                    .background(Color.yellow.opacity(0.7)) // Yellow highlight
-//                                    .cornerRadius(5)
+//        NavigationView {
+//            VStack {
+//                if dialogue.isEmpty {
+//                    Text("Loading content...")
+//                        .padding()
+//                } else {
+//                    ScrollView {
+//                        VStack(alignment: .leading) {
+//                            ForEach(dialogue, id: \.line) { entry in
+//                                VStack(alignment: .leading, spacing: 4) {
+//                                    Text(entry.character) // Display character name
+//                                        .font(.headline)
+//                                        .foregroundColor(.primary) // Adapt to dark/light mode
+//                                    
+//                                    Text(entry.line) // Display line
+//                                        .padding(5)
+//                                        .background(Color.yellow.opacity(0.7)) // Highlight
+//                                        .cornerRadius(5)
+//                                }
+//                                .padding(.bottom, 10)
 //                            }
-//                            .padding(.bottom, 10)
 //                        }
+//                        .padding()
 //                    }
+//                    .scrollIndicators(.hidden) // Clean up scroll view look
 //                }
-//                .frame(maxHeight: .infinity)
-//                .padding()
-//                .background(Color.black) // Set a background for better contrast
-//                .edgesIgnoringSafeArea(.bottom)
-//            }
-//            
-//            HStack {
-//                // Pause/Resume Button
+//                
+//                // Pause/Resume Button Only
 //                Button(action: pauseOrResumeSpeech) {
-//                    Text(isPaused ? "Resume Speaking" : "Pause Speaking")
+//                    Text(isPaused ? "Resume" : "Pause")
+//                        .frame(maxWidth: .infinity)
 //                        .padding()
 //                        .background(isPaused ? Color.green : Color.yellow)
 //                        .foregroundColor(.white)
-//                        .cornerRadius(8)
+//                        .cornerRadius(10)
 //                }
-//                
-//                // Reset Button
-//                Button(action: resetFirstLine) {
-//                    Text("Reset")
-//                        .padding()
-//                        .background(Color.red)
-//                        .foregroundColor(.white)
-//                        .cornerRadius(8)
-//                }
+//                .padding(.horizontal)
 //            }
+//            .navigationTitle("Scene Aloud")
+//            .navigationBarTitleDisplayMode(.inline)
+//            .padding(.bottom)
+//            .onAppear(perform: initializeSpeech)
 //        }
-//        .padding()
-//        .onAppear(perform: initializeSpeech)
 //    }
 //    
+//
+//
 //    func loadFileContent() {
 //        if let filePath = Bundle.main.path(forResource: "cinderella", ofType: "txt") {
 //            do {
 //                let content = try String(contentsOfFile: filePath, encoding: .utf8)
-//                fileContent = content
-//                dialogue = extractDialogue(from: content)
+//                self.fileContent = content
+//                self.dialogue = self.extractDialogue(from: content)
+//                print("✅ File loaded successfully.")
 //            } catch {
-//                fileContent = "Error loading file content."
+//                self.fileContent = "Error loading file content."
+//                print("❌ Error loading file content: \(error.localizedDescription)")
 //            }
 //        } else {
-//            fileContent = "File not found."
+//            self.fileContent = "File not found."
+//            print("❌ File not found in bundle.")
 //        }
 //    }
 //    
@@ -100,9 +98,12 @@
 //    
 //    func initializeSpeech() {
 //        loadFileContent()
-//        if !dialogue.isEmpty {
-//            currentUtteranceIndex = 0
+//        if !self.dialogue.isEmpty {
+//            self.currentUtteranceIndex = 0
 //            startSpeaking()
+//        }
+//        else {
+//            print("No dialog")
 //        }
 //    }
 //    
@@ -119,57 +120,59 @@
 //        }
 //    }
 //    
-//    func resetFirstLine() {
-//        synthesizer.stopSpeaking(at: .immediate)
-//        currentUtteranceIndex = 0
-//        isSpeaking = false
-//        isPaused = false
 //
-//        guard !dialogue.isEmpty else { return }
+//    
+//    func startSpeaking() {
+//        guard currentUtteranceIndex < dialogue.count else {
+//            isSpeaking = false
+//            print("✅ All lines spoken.")
+//            return
+//        }
 //
+//        // Speak the current line
 //        let entry = dialogue[currentUtteranceIndex]
 //        let utterance = AVSpeechUtterance(string: entry.line)
-//        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-//        utterance.postUtteranceDelay = 1.0
+//        
+//        // Set the voice
+//        if let voice = AVSpeechSynthesisVoice(language: "en-US") {
+//            utterance.voice = voice
+//        } else {
+//            print("⚠️ 'en-US' voice not available. Using default voice.")
+//        }
 //
+//        utterance.postUtteranceDelay = 1.0 // Add a delay between lines
+//
+//        // Set up the delegate to handle the next utterance
 //        let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
-//            speakNextUtterance()
+//            self.speakNextUtterance()
 //        }
 //        speechDelegate = delegate
 //        synthesizer.delegate = delegate
 //
 //        synthesizer.speak(utterance)
-//        isSpeaking = true
 //        currentUtteranceIndex += 1
 //    }
+//
 //    
-//    func startSpeaking() {
-//        guard currentUtteranceIndex < dialogue.count else {
-//            isSpeaking = false
-//            return
-//        }
-//
-//        let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
-//            speakNextUtterance()
-//        }
-//        speechDelegate = delegate
-//        synthesizer.delegate = delegate
-//
-//        isSpeaking = true
-//        speakNextUtterance()
-//    }
-//
 //    func speakNextUtterance() {
 //        guard currentUtteranceIndex < dialogue.count else {
 //            isSpeaking = false
+//            print("✅ All lines spoken.")
 //            return
 //        }
 //
+//        // Speak the next line
 //        let entry = dialogue[currentUtteranceIndex]
 //        let utterance = AVSpeechUtterance(string: entry.line)
-//        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
-//        utterance.postUtteranceDelay = 1.0
 //
+//        // Set the voice
+//        if let voice = AVSpeechSynthesisVoice(language: "en-US") {
+//            utterance.voice = voice
+//        } else {
+//            print("⚠️ 'en-US' voice not available. Using default voice.")
+//        }
+//
+//        utterance.postUtteranceDelay = 1.0 // Add a delay between lines
 //        synthesizer.speak(utterance)
 //        currentUtteranceIndex += 1
 //    }
