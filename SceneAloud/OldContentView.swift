@@ -1,38 +1,65 @@
-////
-////  ContentView.swift
-////  SceneAloud
-////
-//
 //import SwiftUI
 //import AVFoundation
 //
 //struct ContentView: View {
+//    // MARK: - State Variables
 //    @State private var fileContent: String = ""
-//    @State private var dialogue: [(character: String, line: String)] = [] // Store character and lines
-//    @State private var isSpeaking: Bool = true // Start speaking by default
-//    @State private var isPaused: Bool = false // Track paused state
-//    @State private var currentUtteranceIndex: Int = 0 // Track current utterance
+//    @State private var dialogue: [(character: String, line: String)] = []
+//    @State private var characters: [String] = []
+//    @State private var selectedCharacter: String?
+//    @State private var isCharacterSelected: Bool = false
+//    @State private var isSpeaking: Bool = true
+//    @State private var isPaused: Bool = false
+//    @State private var currentUtteranceIndex: Int = 0
 //    private let synthesizer = AVSpeechSynthesizer()
-//    @State private var speechDelegate: AVSpeechSynthesizerDelegateWrapper? // Hold strong reference
-//    
+//    @State private var speechDelegate: AVSpeechSynthesizerDelegateWrapper?
+//    @State private var visibleLines: [(character: String, line: String)] = []
+//
+//    // MARK: - Graphics
 //    var body: some View {
 //        NavigationView {
-//            VStack {
-//                if dialogue.isEmpty {
-//                    Text("Loading content...")
+//            if !isCharacterSelected {
+//                // Character Selection Screen
+//                VStack {
+//                    Text("Select a Character")
+//                        .font(.largeTitle)
 //                        .padding()
-//                } else {
+//
+//                    Picker("Choose your character", selection: $selectedCharacter) {
+//                        ForEach(characters, id: \.self) { character in
+//                            Text(character.capitalized)
+//                                .tag(character as String?)
+//                        }
+//                    }
+//                    .pickerStyle(WheelPickerStyle())
+//                    .padding()
+//
+//                    Button("Done") {
+//                        if let selected = selectedCharacter {
+//                            print("✅ Character Selected: \(selected)")
+//                            isCharacterSelected = true
+//                        }
+//                    }
+//                    .padding()
+//                    .background(selectedCharacter == nil ? Color.gray : Color.blue)
+//                    .foregroundColor(.white)
+//                    .cornerRadius(10)
+//                    .disabled(selectedCharacter == nil)
+//                }
+//            } else {
+//                // Script Reading Screen
+//                VStack {
 //                    ScrollView {
 //                        VStack(alignment: .leading) {
-//                            ForEach(dialogue, id: \.line) { entry in
+//                            ForEach(visibleLines, id: \.line) { entry in
 //                                VStack(alignment: .leading, spacing: 4) {
-//                                    Text(entry.character) // Display character name
+//                                    Text(entry.character)
 //                                        .font(.headline)
-//                                        .foregroundColor(.primary) // Adapt to dark/light mode
-//                                    
-//                                    Text(entry.line) // Display line
+//                                        .foregroundColor(.primary)
+//
+//                                    Text(entry.line)
 //                                        .padding(5)
-//                                        .background(Color.yellow.opacity(0.7)) // Highlight
+//                                        .background(Color.yellow.opacity(0.7))
 //                                        .cornerRadius(5)
 //                                }
 //                                .padding(.bottom, 10)
@@ -40,36 +67,39 @@
 //                        }
 //                        .padding()
 //                    }
-//                    .scrollIndicators(.hidden) // Clean up scroll view look
+//
+//                    Button(action: pauseOrResumeSpeech) {
+//                        Text(isPaused ? "Resume" : "Pause")
+//                            .frame(maxWidth: .infinity)
+//                            .padding()
+//                            .background(isPaused ? Color.green : Color.yellow)
+//                            .foregroundColor(.white)
+//                            .cornerRadius(10)
+//                    }
+//                    .padding(.horizontal)
 //                }
-//                
-//                // Pause/Resume Button Only
-//                Button(action: pauseOrResumeSpeech) {
-//                    Text(isPaused ? "Resume" : "Pause")
-//                        .frame(maxWidth: .infinity)
-//                        .padding()
-//                        .background(isPaused ? Color.green : Color.yellow)
-//                        .foregroundColor(.white)
-//                        .cornerRadius(10)
-//                }
-//                .padding(.horizontal)
+//                .navigationTitle("SceneAloud")
+//                .onAppear(perform: initializeSpeech)
 //            }
-//            .navigationTitle("Scene Aloud")
-//            .navigationBarTitleDisplayMode(.inline)
-//            .padding(.bottom)
-//            .onAppear(perform: initializeSpeech)
 //        }
+//        .onAppear(perform: loadFileContent)
 //    }
-//    
 //
-//
+//    // MARK: - Loading Data
 //    func loadFileContent() {
 //        if let filePath = Bundle.main.path(forResource: "cinderella", ofType: "txt") {
 //            do {
 //                let content = try String(contentsOfFile: filePath, encoding: .utf8)
 //                self.fileContent = content
 //                self.dialogue = self.extractDialogue(from: content)
-//                print("✅ File loaded successfully.")
+//                self.characters = Array(Set(dialogue.map { $0.character })).sorted()
+//
+//                // Automatically select the first character
+//                if let firstCharacter = characters.first {
+//                    self.selectedCharacter = firstCharacter
+//                }
+//
+//                print("✅ Characters Loaded: \(characters)")
 //            } catch {
 //                self.fileContent = "Error loading file content."
 //                print("❌ Error loading file content: \(error.localizedDescription)")
@@ -79,34 +109,33 @@
 //            print("❌ File not found in bundle.")
 //        }
 //    }
-//    
+//
+//    // MARK: - Extracting Data
 //    func extractDialogue(from text: String) -> [(character: String, line: String)] {
 //        var extractedDialogue: [(String, String)] = []
 //        let lines = text.split(separator: "\n")
-//        
+//
 //        for line in lines {
 //            if let colonIndex = line.firstIndex(of: ":") {
 //                let characterName = String(line[..<colonIndex]).trimmingCharacters(in: .whitespaces)
 //                let content = line[line.index(after: colonIndex)...].trimmingCharacters(in: .whitespaces)
-//                
+//
 //                extractedDialogue.append((characterName, content))
 //            }
 //        }
-//        
+//
 //        return extractedDialogue
 //    }
-//    
+//
+//    // MARK: - Speech
 //    func initializeSpeech() {
-//        loadFileContent()
-//        if !self.dialogue.isEmpty {
-//            self.currentUtteranceIndex = 0
+//        if !dialogue.isEmpty {
+//            visibleLines = [dialogue[0]]
+//            currentUtteranceIndex = 0
 //            startSpeaking()
 //        }
-//        else {
-//            print("No dialog")
-//        }
 //    }
-//    
+//
 //    func pauseOrResumeSpeech() {
 //        if synthesizer.isSpeaking {
 //            if isPaused {
@@ -115,13 +144,10 @@
 //            } else {
 //                synthesizer.pauseSpeaking(at: .word)
 //                isPaused = true
-//                isSpeaking = false
 //            }
 //        }
 //    }
-//    
 //
-//    
 //    func startSpeaking() {
 //        guard currentUtteranceIndex < dialogue.count else {
 //            isSpeaking = false
@@ -129,56 +155,26 @@
 //            return
 //        }
 //
-//        // Speak the current line
 //        let entry = dialogue[currentUtteranceIndex]
+//
 //        let utterance = AVSpeechUtterance(string: entry.line)
-//        
-//        // Set the voice
-//        if let voice = AVSpeechSynthesisVoice(language: "en-US") {
-//            utterance.voice = voice
-//        } else {
-//            print("⚠️ 'en-US' voice not available. Using default voice.")
-//        }
+//        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+//        utterance.postUtteranceDelay = 1.0
 //
-//        utterance.postUtteranceDelay = 1.0 // Add a delay between lines
-//
-//        // Set up the delegate to handle the next utterance
 //        let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
-//            self.speakNextUtterance()
+//            currentUtteranceIndex += 1
+//            if currentUtteranceIndex < dialogue.count {
+//                visibleLines.append(dialogue[currentUtteranceIndex])
+//            }
+//            startSpeaking()
 //        }
 //        speechDelegate = delegate
 //        synthesizer.delegate = delegate
-//
 //        synthesizer.speak(utterance)
-//        currentUtteranceIndex += 1
-//    }
-//
-//    
-//    func speakNextUtterance() {
-//        guard currentUtteranceIndex < dialogue.count else {
-//            isSpeaking = false
-//            print("✅ All lines spoken.")
-//            return
-//        }
-//
-//        // Speak the next line
-//        let entry = dialogue[currentUtteranceIndex]
-//        let utterance = AVSpeechUtterance(string: entry.line)
-//
-//        // Set the voice
-//        if let voice = AVSpeechSynthesisVoice(language: "en-US") {
-//            utterance.voice = voice
-//        } else {
-//            print("⚠️ 'en-US' voice not available. Using default voice.")
-//        }
-//
-//        utterance.postUtteranceDelay = 1.0 // Add a delay between lines
-//        synthesizer.speak(utterance)
-//        currentUtteranceIndex += 1
 //    }
 //}
 //
-//// Add this class below ContentView
+//// MARK: - Speech Delegate Wrapper
 //class AVSpeechSynthesizerDelegateWrapper: NSObject, AVSpeechSynthesizerDelegate {
 //    private let completion: () -> Void
 //

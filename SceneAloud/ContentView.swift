@@ -2,96 +2,118 @@ import SwiftUI
 import AVFoundation
 
 struct ContentView: View {
+    // MARK: - State Variables
+    @State private var showSplashScreen = true
     @State private var fileContent: String = ""
-    @State private var dialogue: [(character: String, line: String)] = [] // Store character and lines
-    @State private var characters: [String] = [] // Store unique character names
-    @State private var selectedCharacter: String? // The character the user chooses to play
-    @State private var isCharacterSelected: Bool = false // Track if the character is selected
-    @State private var isSpeaking: Bool = true // Start speaking by default
-    @State private var isPaused: Bool = false // Track paused state
-    @State private var currentUtteranceIndex: Int = 0 // Track current utterance
+    @State private var dialogue: [(character: String, line: String)] = []
+    @State private var characters: [String] = []
+    @State private var selectedCharacter: String?
+    @State private var isCharacterSelected: Bool = false
+    @State private var isSpeaking: Bool = true
+    @State private var isPaused: Bool = false
+    @State private var currentUtteranceIndex: Int = 0
     private let synthesizer = AVSpeechSynthesizer()
-    @State private var speechDelegate: AVSpeechSynthesizerDelegateWrapper? // Hold strong reference
+    @State private var speechDelegate: AVSpeechSynthesizerDelegateWrapper?
+    @State private var visibleLines: [(character: String, line: String)] = []
 
+    // MARK: - Graphics
+    struct SplashScreenView: View {
+        var body: some View {
+            VStack {
+                Image("SplashLogo")
+                    .resizable()
+                    .scaledToFit()
+                    .frame(width: 300, height: 300)
+                Text("SceneAloud")
+                    .font(.largeTitle)
+                    .fontWeight(.bold)
+            }
+        }
+    }
+    
     var body: some View {
-        NavigationView {
-            if !isCharacterSelected {
-                // Character Selection Screen
-                VStack {
-                    Text("Select a Character")
-                        .font(.largeTitle)
-                        .padding()
-
-                    Picker("Choose your character", selection: $selectedCharacter) {
-                        ForEach(characters, id: \.self) { character in
-                            Text(character.lowercased().capitalized) // Format as "Narrator", "Cinderella", etc.
-                                .tag(character as String?)
+        ZStack {
+            if showSplashScreen {
+                SplashScreenView()
+                    .onAppear {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+                            withAnimation {
+                                showSplashScreen = false
+                            }
                         }
                     }
-                    .pickerStyle(WheelPickerStyle())
-                    .padding()
-
-                    Button("Done") {
-                        if let selected = selectedCharacter {
-                            print("✅ Character Selected: \(selected)")
-                            isCharacterSelected = true
-                        }
-                    }
-                    .padding()
-                    .background(selectedCharacter == nil ? Color.gray : Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
-                    .disabled(selectedCharacter == nil) // Disable button if no character is selected
-                }
             } else {
-                // Script Reading Screen
-                VStack {
-                    if dialogue.isEmpty {
-                        Text("Loading content...")
+                NavigationView {
+                    if !isCharacterSelected {
+                        // Character Selection Screen
+                        VStack {
+                            Text("Select a Character")
+                                .font(.largeTitle)
+                                .padding()
+
+                            Picker("Choose your character", selection: $selectedCharacter) {
+                                ForEach(characters, id: \.self) { character in
+                                    Text(character.capitalized)
+                                        .tag(character as String?)
+                                }
+                            }
+                            .pickerStyle(WheelPickerStyle())
                             .padding()
-                    } else {
-                        ScrollView {
-                            VStack(alignment: .leading) {
-                                ForEach(dialogue, id: \.line) { entry in
-                                    VStack(alignment: .leading, spacing: 4) {
-                                        Text(entry.character) // Display character name
-                                            .font(.headline)
-                                            .foregroundColor(.primary) // Adapt to dark/light mode
-                                        
-                                        Text(entry.line) // Display line
-                                            .padding(5)
-                                            .background(Color.yellow.opacity(0.7)) // Highlight
-                                            .cornerRadius(5)
-                                    }
-                                    .padding(.bottom, 10)
+
+                            Button("Done") {
+                                if let selected = selectedCharacter {
+                                    print("✅ Character Selected: \(selected)")
+                                    isCharacterSelected = true
                                 }
                             }
                             .padding()
-                        }
-                        .scrollIndicators(.hidden) // Clean up scroll view look
-                    }
-
-                    Button(action: pauseOrResumeSpeech) {
-                        Text(isPaused ? "Resume" : "Pause")
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(isPaused ? Color.green : Color.yellow)
+                            .background(selectedCharacter == nil ? Color.gray : Color.blue)
                             .foregroundColor(.white)
                             .cornerRadius(10)
+                            .disabled(selectedCharacter == nil)
+                        }
+                    } else {
+                        // Script Reading Screen
+                        VStack {
+                            ScrollView {
+                                VStack(alignment: .leading) {
+                                    ForEach(visibleLines, id: \.line) { entry in
+                                        VStack(alignment: .leading, spacing: 4) {
+                                            Text(entry.character)
+                                                .font(.headline)
+                                                .foregroundColor(.primary)
+
+                                            Text(entry.line)
+                                                .padding(5)
+                                                .background(Color.yellow.opacity(0.7))
+                                                .cornerRadius(5)
+                                        }
+                                        .padding(.bottom, 10)
+                                    }
+                                }
+                                .padding()
+                            }
+
+                            Button(action: pauseOrResumeSpeech) {
+                                Text(isPaused ? "Resume" : "Pause")
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(isPaused ? Color.green : Color.yellow)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                            }
+                            .padding(.horizontal)
+                        }
+                        .navigationTitle("SceneAloud")
+                        .onAppear(perform: initializeSpeech)
                     }
-                    .padding(.horizontal)
                 }
-                .navigationTitle("Scene Aloud")
-                .navigationBarTitleDisplayMode(.inline)
-                .padding(.bottom)
-                .onAppear(perform: initializeSpeech)
+                .onAppear(perform: loadFileContent)
             }
-        }
-        .onAppear {
-            loadFileContent()
         }
     }
 
+    // MARK: - Loading Data
     func loadFileContent() {
         if let filePath = Bundle.main.path(forResource: "cinderella", ofType: "txt") {
             do {
@@ -99,6 +121,12 @@ struct ContentView: View {
                 self.fileContent = content
                 self.dialogue = self.extractDialogue(from: content)
                 self.characters = Array(Set(dialogue.map { $0.character })).sorted()
+
+                // Automatically select the first character
+                if let firstCharacter = characters.first {
+                    self.selectedCharacter = firstCharacter
+                }
+
                 print("✅ Characters Loaded: \(characters)")
             } catch {
                 self.fileContent = "Error loading file content."
@@ -110,24 +138,27 @@ struct ContentView: View {
         }
     }
 
+    // MARK: - Extracting Data
     func extractDialogue(from text: String) -> [(character: String, line: String)] {
         var extractedDialogue: [(String, String)] = []
         let lines = text.split(separator: "\n")
-        
+
         for line in lines {
             if let colonIndex = line.firstIndex(of: ":") {
                 let characterName = String(line[..<colonIndex]).trimmingCharacters(in: .whitespaces)
                 let content = line[line.index(after: colonIndex)...].trimmingCharacters(in: .whitespaces)
-                
+
                 extractedDialogue.append((characterName, content))
             }
         }
-        
+
         return extractedDialogue
     }
 
+    // MARK: - Speech
     func initializeSpeech() {
         if !dialogue.isEmpty {
+            visibleLines = [dialogue[0]]
             currentUtteranceIndex = 0
             startSpeaking()
         }
@@ -141,7 +172,6 @@ struct ContentView: View {
             } else {
                 synthesizer.pauseSpeaking(at: .word)
                 isPaused = true
-                isSpeaking = false
             }
         }
     }
@@ -154,33 +184,40 @@ struct ContentView: View {
         }
 
         let entry = dialogue[currentUtteranceIndex]
-        
-        // Skip the selected character's lines
-        if entry.character == selectedCharacter {
-            print("🎭 Skipping \(selectedCharacter ?? "")'s line.")
-            currentUtteranceIndex += 1
-            startSpeaking() // Move to the next line
-            return
-        }
 
         let utterance = AVSpeechUtterance(string: entry.line)
-        if let voice = AVSpeechSynthesisVoice(language: "en-US") {
-            utterance.voice = voice
-        } else {
-            print("⚠️ 'en-US' voice not available. Using default voice.")
-        }
+        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
         utterance.postUtteranceDelay = 1.0
 
         let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
-            self.startSpeaking()
+            currentUtteranceIndex += 1
+            if currentUtteranceIndex < dialogue.count {
+                visibleLines.append(dialogue[currentUtteranceIndex])
+            }
+            startSpeaking()
         }
         speechDelegate = delegate
         synthesizer.delegate = delegate
-
         synthesizer.speak(utterance)
-        currentUtteranceIndex += 1
     }
 }
+
+// MARK: - Splash Screen View
+struct SplashScreenView: View {
+    var body: some View {
+        VStack {
+            Image("SplashLogo")
+                .resizable()
+                .scaledToFit()
+                .frame(width: 200, height: 200)
+            Text("SceneAloud")
+                .font(.largeTitle)
+                .fontWeight(.bold)
+        }
+    }
+}
+
+// MARK: - Speech Delegate Wrapper
 class AVSpeechSynthesizerDelegateWrapper: NSObject, AVSpeechSynthesizerDelegate {
     private let completion: () -> Void
 
