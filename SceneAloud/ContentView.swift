@@ -159,25 +159,33 @@ struct ContentView: View {
     func startSpeaking() {
         guard currentUtteranceIndex < dialogue.count else {
             isSpeaking = false
+            print("✅ All lines spoken.")
             return
         }
 
+        // Speak the current line
         let entry = dialogue[currentUtteranceIndex]
         let utterance = AVSpeechUtterance(string: entry.line)
         
-        // Try to get a specific voice; fallback to default if unavailable
+        // Set the voice
         if let voice = AVSpeechSynthesisVoice(language: "en-US") {
             utterance.voice = voice
         } else {
             print("⚠️ 'en-US' voice not available. Using default voice.")
         }
 
-        utterance.postUtteranceDelay = 1.0
+        utterance.postUtteranceDelay = 1.0 // Add a delay between lines
+
+        // Set up the delegate to handle the next utterance
+        let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
+            self.speakNextUtterance()
+        }
+        speechDelegate = delegate
+        synthesizer.delegate = delegate
 
         synthesizer.speak(utterance)
         currentUtteranceIndex += 1
     }
-
 //    func speakNextUtterance() {
 //        guard currentUtteranceIndex < dialogue.count else {
 //            isSpeaking = false
@@ -196,21 +204,22 @@ struct ContentView: View {
     func speakNextUtterance() {
         guard currentUtteranceIndex < dialogue.count else {
             isSpeaking = false
+            print("✅ All lines spoken.")
             return
         }
 
+        // Speak the next line
         let entry = dialogue[currentUtteranceIndex]
         let utterance = AVSpeechUtterance(string: entry.line)
-        
-        // Try to get a specific voice; fallback to default if unavailable
+
+        // Set the voice
         if let voice = AVSpeechSynthesisVoice(language: "en-US") {
             utterance.voice = voice
         } else {
             print("⚠️ 'en-US' voice not available. Using default voice.")
         }
 
-        utterance.postUtteranceDelay = 1.0
-
+        utterance.postUtteranceDelay = 1.0 // Add a delay between lines
         synthesizer.speak(utterance)
         currentUtteranceIndex += 1
     }
