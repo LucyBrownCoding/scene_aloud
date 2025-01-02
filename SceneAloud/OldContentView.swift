@@ -3,6 +3,8 @@
 //
 //struct ContentView: View {
 //    // MARK: - State Variables
+//    // Commenting out the showSplashScreen flag
+//    // @State private var showSplashScreen = true
 //    @State private var fileContent: String = ""
 //    @State private var dialogue: [(character: String, line: String)] = []
 //    @State private var characters: [String] = []
@@ -15,8 +17,41 @@
 //    @State private var speechDelegate: AVSpeechSynthesizerDelegateWrapper?
 //    @State private var visibleLines: [(character: String, line: String)] = []
 //
-//    // MARK: - Graphics
+//    // MARK: - Splash Screen
+//    /*
+//    struct SplashScreenView: View {
+//        var body: some View {
+//            VStack {
+//                Image("SplashLogo")
+//                    .resizable()
+//                    .scaledToFit()
+//                    .frame(width: 300, height: 300)
+//                Text("SceneAloud")
+//                    .font(.largeTitle)
+//                    .fontWeight(.bold)
+//            }
+//        }
+//    }
+//    */
+//    
+//    // MARK: - Main Body
 //    var body: some View {
+//        // Instead of using the ZStack approach with splash screen,
+//        // we'll directly show the NavigationView.
+//        /*
+//        ZStack {
+//            if showSplashScreen {
+//                SplashScreenView()
+//                    .onAppear {
+//                        DispatchQueue.main.asyncAfter(deadline: .now() + 4) {
+//                            withAnimation {
+//                                showSplashScreen = false
+//                            }
+//                        }
+//                    }
+//            } else {
+//        */
+//        
 //        NavigationView {
 //            if !isCharacterSelected {
 //                // Character Selection Screen
@@ -56,7 +91,7 @@
 //                                    Text(entry.character)
 //                                        .font(.headline)
 //                                        .foregroundColor(.primary)
-//
+//                                    
 //                                    Text(entry.line)
 //                                        .padding(5)
 //                                        .background(Color.yellow.opacity(0.7))
@@ -82,19 +117,34 @@
 //                .onAppear(perform: initializeSpeech)
 //            }
 //        }
+//        // Load the file content immediately (no splash screen delay)
 //        .onAppear(perform: loadFileContent)
+//        
+//        /*
+//            }
+//        }
+//        */
 //    }
 //
 //    // MARK: - Loading Data
 //    func loadFileContent() {
+//        // Attempt to locate cinderella.txt in your main bundle
 //        if let filePath = Bundle.main.path(forResource: "cinderella", ofType: "txt") {
 //            do {
 //                let content = try String(contentsOfFile: filePath, encoding: .utf8)
 //                self.fileContent = content
+//                // Extract dialogue lines from the file
 //                self.dialogue = self.extractDialogue(from: content)
+//
+//                // Check if the file was essentially empty or had no valid lines
+//                if dialogue.isEmpty {
+//                    print("⚠️ The file is empty or has no valid lines with a colon.")
+//                }
+//
+//                // Build a unique list of characters
 //                self.characters = Array(Set(dialogue.map { $0.character })).sorted()
 //
-//                // Automatically select the first character
+//                // Optionally auto-select the first character
 //                if let firstCharacter = characters.first {
 //                    self.selectedCharacter = firstCharacter
 //                }
@@ -116,12 +166,20 @@
 //        let lines = text.split(separator: "\n")
 //
 //        for line in lines {
-//            if let colonIndex = line.firstIndex(of: ":") {
-//                let characterName = String(line[..<colonIndex]).trimmingCharacters(in: .whitespaces)
-//                let content = line[line.index(after: colonIndex)...].trimmingCharacters(in: .whitespaces)
-//
-//                extractedDialogue.append((characterName, content))
+//            // Trim whitespace/newlines from each raw line
+//            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
+//            
+//            // Look for a colon to separate 'character' from 'dialogue'
+//            guard let colonIndex = trimmedLine.firstIndex(of: ":") else {
+//                // If no colon, log or skip
+//                print("⚠️ No colon found in line: \(trimmedLine)")
+//                continue
 //            }
+//
+//            let characterName = String(trimmedLine[..<colonIndex]).trimmingCharacters(in: .whitespaces)
+//            let content = trimmedLine[trimmedLine.index(after: colonIndex)...].trimmingCharacters(in: .whitespaces)
+//
+//            extractedDialogue.append((characterName, content))
 //        }
 //
 //        return extractedDialogue
@@ -156,11 +214,11 @@
 //        }
 //
 //        let entry = dialogue[currentUtteranceIndex]
-//
 //        let utterance = AVSpeechUtterance(string: entry.line)
 //        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
 //        utterance.postUtteranceDelay = 1.0
 //
+//        // Wrap the completion so we can move to the next line automatically
 //        let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
 //            currentUtteranceIndex += 1
 //            if currentUtteranceIndex < dialogue.count {
@@ -168,6 +226,7 @@
 //            }
 //            startSpeaking()
 //        }
+//        
 //        speechDelegate = delegate
 //        synthesizer.delegate = delegate
 //        synthesizer.speak(utterance)
@@ -186,4 +245,3 @@
 //        completion()
 //    }
 //}
-//
