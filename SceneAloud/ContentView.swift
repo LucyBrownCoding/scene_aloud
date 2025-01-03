@@ -27,139 +27,199 @@ struct ContentView: View {
     // When the script completes, show an alert
     @State private var showScriptCompletionAlert: Bool = false
 
+    // Toggle for displaying lines as read
+    @State private var displayLinesAsRead: Bool = true
+
     // MARK: - Main Body
     var body: some View {
         NavigationView {
             if !isCharacterSelected {
-                // Character Selection Screen
-                VStack {
-                    Text("Select a Character")
+                VStack(alignment: .leading) {
+                    // Settings Header
+                    Text("Settings")
                         .font(.largeTitle)
-                        .padding()
+                        .bold()
+                        .padding(.top, 20)
 
-                    Picker("Choose your character", selection: $selectedCharacter) {
-                        ForEach(characters, id: \.self) { character in
-                            Text(character.capitalized)
-                                .tag(character as String?)
+                    // Group the character picker and toggle into a single block
+                    VStack(alignment: .leading, spacing: 30) {
+                        // Select a Character
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Select a Character")
+                                .font(.title2)
+
+                            Picker("Choose your character", selection: $selectedCharacter) {
+                                ForEach(characters, id: \.self) { character in
+                                    Text(character.capitalized)
+                                        .tag(character as String?)
+                                }
+                            }
+                            .pickerStyle(WheelPickerStyle())
+                            .frame(height: 120)
+                            .clipped()
+                        }
+
+                        // Toggle Display Lines
+                        VStack(alignment: .leading, spacing: 10) {
+                            Text("Display lines as read")
+                                .font(.title2)
+
+                            Toggle("", isOn: $displayLinesAsRead)
+                                .labelsHidden()
                         }
                     }
-                    .pickerStyle(WheelPickerStyle())
-                    .padding()
+                    .padding(.top, 20) // Additional spacing between header and settings
 
-                    Button("Done") {
+                    // Spacer can be smaller or removed if you want less gap before "Done"
+                    Spacer()
+
+                    // Done Button
+                    Button(action: {
                         if let selected = selectedCharacter {
                             print("✅ Character Selected: \(selected)")
                             isCharacterSelected = true
                         }
+                    }) {
+                        Text("Done")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(selectedCharacter == nil ? Color.gray : Color.blue)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
                     }
-                    // Button changes color & is enabled only if selectedCharacter != nil
-                    .padding()
-                    .background(selectedCharacter == nil ? Color.gray : Color.blue)
-                    .foregroundColor(.white)
-                    .cornerRadius(10)
                     .disabled(selectedCharacter == nil)
+                    .padding(.bottom, 20)
                 }
+                .padding(.horizontal, 20)
+                .frame(maxHeight: .infinity, alignment: .top)
             } else {
                 // Script Reading Screen
                 VStack {
-                    // Display lines spoken so far
-                    ScrollView {
-                        VStack(alignment: .leading) {
-                            ForEach(visibleLines.indices, id: \.self) { index in
-                                let entry = visibleLines[index]
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(entry.character)
-                                        .font(.headline)
-                                        .foregroundColor(.primary)
-                                    
-                                    // If it's the user's line, show placeholder text
-                                    if entry.character == selectedCharacter {
-                                        Text("It’s your line! Press to continue.")
-                                            .padding(5)
-                                            .background(Color.yellow.opacity(0.7))
-                                            .cornerRadius(5)
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(dialogue.indices, id: \.self) { index in
+                                    let entry = dialogue[index]
+
+                                    if displayLinesAsRead {
+                                        // Display lines up to the current utterance
+                                        if index <= currentUtteranceIndex {
+                                            lineView(for: entry, at: index)
+                                        }
                                     } else {
-                                        // Otherwise, show the actual spoken line
-                                        Text(entry.line)
-                                            .padding(5)
-                                            .background(Color.yellow.opacity(0.7))
-                                            .cornerRadius(5)
+                                        // Display all lines
+                                        lineView(for: entry, at: index)
                                     }
                                 }
-                                .padding(.bottom, 10)
+                            }
+                            .padding()
+                            .onChange(of: currentUtteranceIndex) {
+                                withAnimation {
+                                    proxy.scrollTo(currentUtteranceIndex, anchor: .top)
+                                }
                             }
                         }
-                        .padding()
+                        .background(Color(UIColor.systemBackground))
                     }
+                    .background(Color(UIColor.systemBackground))
 
-                    // If it's currently the user's line, show a "Continue" button
-                    if isUserLine {
-                        Button(action: {
-                            // The user has "finished" their line
-                            userLineFinished()
-                        }) {
-                            Text("Continue")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.orange)
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
+                    // Action Buttons
+                    VStack {
+                        if isUserLine {
+                            Button(action: {
+                                userLineFinished()
+                            }) {
+                                Text("Continue")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.orange)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                            }
+                            .padding(.horizontal)
+                        } else {
+                            Button(action: pauseOrResumeSpeech) {
+                                Text(isPaused ? "Resume" : "Pause")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(isPaused ? Color.green : Color.yellow)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                            }
+                            .padding(.horizontal)
                         }
-                        .padding(.horizontal)
-                    } else {
-                        // Otherwise, show the "Pause/Resume" button for TTS
-                        Button(action: pauseOrResumeSpeech) {
-                            Text(isPaused ? "Resume" : "Pause")
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(isPaused ? Color.green : Color.yellow)
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                        }
-                        .padding(.horizontal)
                     }
+                    .padding(.bottom, 20)
                 }
                 .navigationTitle("SceneAloud")
+                .navigationBarTitleDisplayMode(.inline)
                 .onAppear(perform: initializeSpeech)
             }
         }
-        // Load the file content immediately
         .onAppear(perform: loadFileContent)
-        // Present an alert if the script has ended
         .alert(isPresented: $showScriptCompletionAlert) {
             Alert(
                 title: Text("You’ve reached the end!"),
-                message: Text("Would you like to restart with the same character, or choose a different one?"),
-                primaryButton: .default(Text("Same Character")) {
-                    restartScript(withSameCharacter: true)
+                message: Text("Would you like to keep the same settings or change your settings?"),
+                primaryButton: .default(Text("Keep Settings")) {
+                    // Restart script with the same character and toggle
+                    restartScript(keepSettings: true)
                 },
-                secondaryButton: .default(Text("Different Character")) {
-                    restartScript(withSameCharacter: false)
+                secondaryButton: .default(Text("Change Settings")) {
+                    // Go back to the settings screen so user can modify character/toggle
+                    restartScript(keepSettings: false)
                 }
             )
         }
     }
 
+    // MARK: - Helper View
+    @ViewBuilder
+    private func lineView(for entry: (character: String, line: String), at index: Int) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(entry.character)
+                .font(.headline)
+                .foregroundColor(.primary)
+
+            if entry.character == selectedCharacter {
+                Text("It’s your line! Press to continue.")
+                    .font(.body)
+                    .padding(5)
+                    .background(
+                        index == currentUtteranceIndex ? Color.yellow.opacity(0.7) : Color.clear
+                    )
+                    .cornerRadius(5)
+            } else {
+                Text(entry.line)
+                    .font(.body)
+                    .padding(5)
+                    .background(
+                        index == currentUtteranceIndex ? Color.yellow.opacity(0.7) : Color.clear
+                    )
+                    .cornerRadius(5)
+            }
+        }
+        .padding(.bottom, 5)
+        .id(index)
+    }
+
     // MARK: - Loading Data
     func loadFileContent() {
-        // Attempt to locate cinderella.txt in your main bundle
         if let filePath = Bundle.main.path(forResource: "cinderella", ofType: "txt") {
             do {
                 let content = try String(contentsOfFile: filePath, encoding: .utf8)
                 self.fileContent = content
-                // Extract dialogue lines from the file
                 self.dialogue = self.extractDialogue(from: content)
 
-                // Check if the file was essentially empty or had no valid lines
                 if dialogue.isEmpty {
                     print("⚠️ The file is empty or has no valid lines with a colon.")
                 }
 
-                // Build a unique list of characters
                 self.characters = Array(Set(dialogue.map { $0.character })).sorted()
-
-                // Optionally auto-select the first character
+                // Optionally, you could reset the default selected character here
                 if let firstCharacter = characters.first {
                     self.selectedCharacter = firstCharacter
                 }
@@ -175,16 +235,13 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Extracting Data
     func extractDialogue(from text: String) -> [(character: String, line: String)] {
         var extractedDialogue: [(String, String)] = []
         let lines = text.split(separator: "\n")
 
         for line in lines {
             let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
-            
             guard let colonIndex = trimmedLine.firstIndex(of: ":") else {
-                print("⚠️ No colon found in line: \(trimmedLine)")
                 continue
             }
 
@@ -197,26 +254,18 @@ struct ContentView: View {
         return extractedDialogue
     }
 
-    // MARK: - Speech / Line Handling
     func initializeSpeech() {
-        // Start fresh
         currentUtteranceIndex = 0
         visibleLines = []
         isSpeaking = false
         isPaused = false
-
-        // Create a fresh AVSpeechSynthesizer for safety
         synthesizer = AVSpeechSynthesizer()
         speechDelegate = nil
-
         startNextLine()
     }
 
-    /// Called whenever we want to show/speak the next line.
     private func startNextLine() {
         guard currentUtteranceIndex < dialogue.count else {
-            print("✅ All lines spoken.")
-            // Show the user an alert with options to restart
             showScriptCompletionAlert = true
             return
         }
@@ -224,23 +273,15 @@ struct ContentView: View {
         let entry = dialogue[currentUtteranceIndex]
         visibleLines.append(entry)
 
-        print("➡️ Now showing line \(currentUtteranceIndex) for: \(entry.character)")
-
         if entry.character == selectedCharacter {
-            // It's the user's line
-            print("   This line is the USER’s line (no TTS).")
             isUserLine = true
         } else {
-            // It's someone else's line
-            print("   This line will be spoken by AVSpeechSynthesizer.")
             isUserLine = false
             speakLine(entry.line)
         }
     }
 
-    /// Called when the user finishes their line and taps "Continue".
     private func userLineFinished() {
-        // Move to the next line
         currentUtteranceIndex += 1
         startNextLine()
     }
@@ -262,12 +303,8 @@ struct ContentView: View {
         synthesizer.speak(utterance)
     }
 
-    // Pause/Resume TTS
     func pauseOrResumeSpeech() {
-        guard synthesizer.isSpeaking else {
-            print("⚠️ Pause/Resume tapped, but there's no TTS in progress.")
-            return
-        }
+        guard synthesizer.isSpeaking else { return }
         if isPaused {
             isPaused = false
             synthesizer.continueSpeaking()
@@ -277,39 +314,27 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Restart Script Logic
-    private func restartScript(withSameCharacter: Bool) {
-        if withSameCharacter {
-            // Restart from the beginning with the same character
-            print("🔄 Restarting script with the SAME character.")
-            currentUtteranceIndex = 0
-            visibleLines.removeAll()
-            isUserLine = false
+    // MARK: - Restart Script
+    private func restartScript(keepSettings: Bool) {
+        synthesizer.stopSpeaking(at: .immediate)
+        synthesizer.delegate = nil
+        visibleLines.removeAll()
+        currentUtteranceIndex = 0
+        isUserLine = false
 
-            synthesizer.stopSpeaking(at: .immediate)
-            synthesizer.delegate = nil
+        if keepSettings {
+            // Keep the same character and toggle values
             initializeSpeech()
-            
         } else {
-            // Go back to character selection
-            print("🔄 Restarting script with a DIFFERENT character.")
+            // Allow user to modify settings again
             isCharacterSelected = false
-            
-            // IMPORTANT: We set the first character as soon as we return:
-            // This ensures the Done button is immediately enabled if "Cinderella" is first.
-            selectedCharacter = characters.first
-            
-            visibleLines.removeAll()
-            currentUtteranceIndex = 0
-            isUserLine = false
-
-            synthesizer.stopSpeaking(at: .immediate)
-            synthesizer.delegate = nil
+            // Optionally reset toggle or character to nil if you prefer a "fresh" start
+            // selectedCharacter = nil
+            // displayLinesAsRead = true
         }
     }
 }
 
-// MARK: - Speech Delegate Wrapper
 class AVSpeechSynthesizerDelegateWrapper: NSObject, AVSpeechSynthesizerDelegate {
     private let completion: () -> Void
 
@@ -317,7 +342,8 @@ class AVSpeechSynthesizerDelegateWrapper: NSObject, AVSpeechSynthesizerDelegate 
         self.completion = completion
     }
 
-    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
+                           didFinish utterance: AVSpeechUtterance) {
         completion()
     }
 }
