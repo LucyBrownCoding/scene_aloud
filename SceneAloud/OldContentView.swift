@@ -101,7 +101,7 @@
 //                            VStack(alignment: .leading, spacing: 10) {
 //                                ForEach(dialogue.indices, id: \.self) { index in
 //                                    let entry = dialogue[index]
-//                                    
+//
 //                                    if displayLinesAsRead {
 //                                        // Display lines up to the current utterance
 //                                        if index <= currentUtteranceIndex {
