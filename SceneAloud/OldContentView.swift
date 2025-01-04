@@ -114,9 +114,9 @@
 //                                }
 //                            }
 //                            .padding()
-//                            .onChange(of: currentUtteranceIndex) {
+//                            .onChange(of: currentUtteranceIndex) { newValue, oldValue in
 //                                withAnimation {
-//                                    proxy.scrollTo(currentUtteranceIndex, anchor: .top)
+//                                    proxy.scrollTo(newValue, anchor: .top)
 //                                }
 //                            }
 //                        }
@@ -156,6 +156,20 @@
 //                }
 //                .navigationTitle("SceneAloud")
 //                .navigationBarTitleDisplayMode(.inline)
+//                .toolbar {
+//                    // Add Back Button to the Navigation Bar
+//                    ToolbarItem(placement: .navigationBarLeading) {
+//                        Button(action: {
+//                            // Call restartScript with keepSettings: false to change settings
+//                            restartScript(keepSettings: false)
+//                        }) {
+//                            HStack {
+//                                Image(systemName: "arrow.left") // Optional: Add an arrow icon
+//                                Text("Back")
+//                            }
+//                        }
+//                    }
+//                }
 //                .onAppear(perform: initializeSpeech)
 //            }
 //        }

@@ -30,7 +30,7 @@ struct ContentView: View {
     // Toggle for displaying lines as read
     @State private var displayLinesAsRead: Bool = true
 
-    // MARK: - Main Body
+    // MARK: Settings pg
     var body: some View {
         NavigationView {
             if !isCharacterSelected {
@@ -94,7 +94,7 @@ struct ContentView: View {
                 .padding(.horizontal, 20)
                 .frame(maxHeight: .infinity, alignment: .top)
             } else {
-                // Script Reading Screen
+                //MARK: Script Reading pg
                 VStack {
                     ScrollViewReader { proxy in
                         ScrollView {
@@ -173,9 +173,13 @@ struct ContentView: View {
                 .onAppear(perform: initializeSpeech)
             }
         }
-        .onAppear(perform: loadFileContent)
+        .onAppear {
+            loadFileContent()
+            // listBundleResources()
+        }
         .alert(isPresented: $showScriptCompletionAlert) {
             Alert(
+                //MARK: Restart Pop-up
                 title: Text("You’ve reached the end!"),
                 message: Text("Would you like to keep the same settings or change your settings?"),
                 primaryButton: .default(Text("Keep Settings")) {
@@ -220,11 +224,12 @@ struct ContentView: View {
         .id(index)
     }
 
-    // MARK: - Loading Data
+//    // MARK: - Loading Data
     func loadFileContent() {
-        if let filePath = Bundle.main.path(forResource: "cinderella", ofType: "txt") {
+        // Attempt to locate the file in the Scripts subdirectory
+        if let fileURL = Bundle.main.url(forResource: "high_school_play", withExtension: "txt") {
             do {
-                let content = try String(contentsOfFile: filePath, encoding: .utf8)
+                let content = try String(contentsOf: fileURL, encoding: .utf8)
                 self.fileContent = content
                 self.dialogue = self.extractDialogue(from: content)
 
@@ -245,10 +250,10 @@ struct ContentView: View {
             }
         } else {
             self.fileContent = "File not found."
-            print("❌ File not found in bundle.")
+            print("❌ File not found.")
         }
     }
-
+    
     func extractDialogue(from text: String) -> [(character: String, line: String)] {
         var extractedDialogue: [(String, String)] = []
         let lines = text.split(separator: "\n")
@@ -267,7 +272,30 @@ struct ContentView: View {
 
         return extractedDialogue
     }
-
+    
+//    func listBundleResources() {
+//        if let resourcePath = Bundle.main.resourcePath {
+//            do {
+//                let resources = try FileManager.default.contentsOfDirectory(atPath: resourcePath)
+//                print("Resources in bundle root: \(resources)")
+//                
+//                // Check if Scripts directory exists
+//                if resources.contains("Scripts") {
+//                    let scriptsPath = (resourcePath as NSString).appendingPathComponent("Scripts")
+//                    let scriptsResources = try FileManager.default.contentsOfDirectory(atPath: scriptsPath)
+//                    print("Resources in Scripts directory: \(scriptsResources)")
+//                } else {
+//                    print("❌ Scripts directory not found in bundle.")
+//                }
+//            } catch {
+//                print("❌ Error listing bundle resources: \(error.localizedDescription)")
+//            }
+//        } else {
+//            print("❌ Unable to access bundle resource path.")
+//        }
+//    }
+    
+    //MARK: Speech
     func initializeSpeech() {
         currentUtteranceIndex = 0
         visibleLines = []
