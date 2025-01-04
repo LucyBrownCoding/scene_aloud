@@ -6,7 +6,7 @@ struct ContentView: View {
     @State private var fileContent: String = ""
     @State private var dialogue: [(character: String, line: String)] = []
     @State private var characters: [String] = []
-    @State private var selectedCharacter: String?
+    @State private var selectedCharacter: String = "NA" // Default to "NA"
     @State private var isCharacterSelected: Bool = false
 
     // Track the line reading state
@@ -30,7 +30,7 @@ struct ContentView: View {
     // Toggle for displaying lines as read
     @State private var displayLinesAsRead: Bool = true
 
-    // MARK: Settings pg
+    // MARK: Settings Page
     var body: some View {
         NavigationView {
             if !isCharacterSelected {
@@ -50,8 +50,16 @@ struct ContentView: View {
 
                             Picker("Choose your character", selection: $selectedCharacter) {
                                 ForEach(characters, id: \.self) { character in
-                                    Text(character.capitalized)
-                                        .tag(character as String?)
+                                    // Visually distinguish "NA" by displaying "Not Applicable"
+                                    if character == "NA" {
+                                        Text("Not Applicable")
+                                            .fontWeight(.bold)
+                                            .foregroundColor(.blue)
+                                            .tag(character)
+                                    } else {
+                                        Text(character.capitalized)
+                                            .tag(character)
+                                    }
                                 }
                             }
                             .pickerStyle(WheelPickerStyle())
@@ -75,26 +83,24 @@ struct ContentView: View {
 
                     // Done Button
                     Button(action: {
-                        if let selected = selectedCharacter {
-                            print("✅ Character Selected: \(selected)")
-                            isCharacterSelected = true
-                        }
+                        isCharacterSelected = true
+                        print("✅ Character Selected: \(selectedCharacter)")
                     }) {
                         Text("Done")
                             .font(.headline)
                             .frame(maxWidth: .infinity)
                             .padding()
-                            .background(selectedCharacter == nil ? Color.gray : Color.blue)
+                            .background(Color.blue) // Always blue since "NA" is default
                             .foregroundColor(.white)
                             .cornerRadius(10)
                     }
-                    .disabled(selectedCharacter == nil)
+                    .disabled(false) // Always enabled
                     .padding(.bottom, 20)
                 }
                 .padding(.horizontal, 20)
                 .frame(maxHeight: .infinity, alignment: .top)
             } else {
-                //MARK: Script Reading pg
+                //MARK: Script Reading Page
                 VStack {
                     ScrollViewReader { proxy in
                         ScrollView {
@@ -202,7 +208,7 @@ struct ContentView: View {
                 .font(.headline)
                 .foregroundColor(.primary)
 
-            if entry.character == selectedCharacter {
+            if selectedCharacter != "NA" && entry.character == selectedCharacter {
                 Text("It’s your line! Press to continue.")
                     .font(.body)
                     .padding(5)
@@ -224,7 +230,7 @@ struct ContentView: View {
         .id(index)
     }
 
-//    // MARK: - Loading Data
+    // MARK: - Loading Data
     func loadFileContent() {
         // Attempt to locate the file in the Scripts subdirectory
         if let fileURL = Bundle.main.url(forResource: "high_school_play", withExtension: "txt") {
@@ -237,10 +243,24 @@ struct ContentView: View {
                     print("⚠️ The file is empty or has no valid lines with a colon.")
                 }
 
-                self.characters = Array(Set(dialogue.map { $0.character })).sorted()
-                // Optionally, you could reset the default selected character here
-                if let firstCharacter = characters.first {
-                    self.selectedCharacter = firstCharacter
+                // Extract unique characters and sort them
+                var extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
+
+                // Ensure "NA" is not part of the script's characters to maintain script integrity
+                if extractedCharacters.contains("NA") {
+                    print("⚠️ Warning: 'NA' found in script characters. Removing to prevent conflicts.")
+                    extractedCharacters.removeAll { $0 == "NA" }
+                }
+
+                self.characters = extractedCharacters
+
+                // **Insert "NA" at the beginning of the characters list**
+                self.characters.insert("NA", at: 0)
+
+                // "NA" is already set as the default selection
+                // Ensure "NA" is present (redundant after insert, but safe)
+                if !self.characters.contains("NA") {
+                    self.characters.insert("NA", at: 0)
                 }
 
                 print("✅ Characters Loaded: \(characters)")
@@ -253,7 +273,7 @@ struct ContentView: View {
             print("❌ File not found.")
         }
     }
-    
+
     func extractDialogue(from text: String) -> [(character: String, line: String)] {
         var extractedDialogue: [(String, String)] = []
         let lines = text.split(separator: "\n")
@@ -273,29 +293,7 @@ struct ContentView: View {
         return extractedDialogue
     }
     
-//    func listBundleResources() {
-//        if let resourcePath = Bundle.main.resourcePath {
-//            do {
-//                let resources = try FileManager.default.contentsOfDirectory(atPath: resourcePath)
-//                print("Resources in bundle root: \(resources)")
-//                
-//                // Check if Scripts directory exists
-//                if resources.contains("Scripts") {
-//                    let scriptsPath = (resourcePath as NSString).appendingPathComponent("Scripts")
-//                    let scriptsResources = try FileManager.default.contentsOfDirectory(atPath: scriptsPath)
-//                    print("Resources in Scripts directory: \(scriptsResources)")
-//                } else {
-//                    print("❌ Scripts directory not found in bundle.")
-//                }
-//            } catch {
-//                print("❌ Error listing bundle resources: \(error.localizedDescription)")
-//            }
-//        } else {
-//            print("❌ Unable to access bundle resource path.")
-//        }
-//    }
-    
-    //MARK: Speech
+    // MARK: - Speech
     func initializeSpeech() {
         currentUtteranceIndex = 0
         visibleLines = []
@@ -315,7 +313,8 @@ struct ContentView: View {
         let entry = dialogue[currentUtteranceIndex]
         visibleLines.append(entry)
 
-        if entry.character == selectedCharacter {
+        // Set isUserLine only if a specific character is selected and matches the current entry
+        if selectedCharacter != "NA" && entry.character == selectedCharacter {
             isUserLine = true
         } else {
             isUserLine = false
@@ -370,9 +369,9 @@ struct ContentView: View {
         } else {
             // Allow user to modify settings again
             isCharacterSelected = false
-            // Optionally reset toggle or character to nil if you prefer a "fresh" start
-            // selectedCharacter = nil
-            // displayLinesAsRead = true
+            // Reset to default "NA" selection
+            selectedCharacter = "NA"
+            displayLinesAsRead = true
         }
     }
 }
