@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+    "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Mandatory Keys -->
+    <key>CFBundleIdentifier</key>
+    <string>com.SceneAloud.SceneAloud</string>
+    
+    <key>CFBundleName</key>
+    <string>SceneAloud</string>
+    
+    <key>CFBundleVersion</key>
+    <string>1</string>
+    
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    
+    <key>CFBundleExecutable</key>
+    <string>$(EXECUTABLE_NAME)</string>
+    
+    <!-- File Access Keys -->
+    <key>LSSupportsOpeningDocumentsInPlace</key>
+    <true/>
+    
+    <key>UIFileSharingEnabled</key>
+    <true/>
+    
+    <key>NSCameraUsageDescription</key>
+    <string>This app requires access to the camera to scan documents.</string>
+    
+    <!-- Optional UI Orientation -->
+    <key>UISupportedInterfaceOrientations</key>
+    <array>
+        <string>UIInterfaceOrientationPortrait</string>
+        <string>UIInterfaceOrientationLandscapeLeft</string>
+        <string>UIInterfaceOrientationLandscapeRight</string>
+    </array>
+    
+    <!-- Optional: App Transport Security Settings -->
+    <key>NSAppTransportSecurity</key>
+    <dict>
+        <key>NSAllowsArbitraryLoads</key>
+        <false/>
+        <!-- Add more ATS exceptions if necessary -->
+    </dict>
+    
+    <!-- Optional: Privacy - Camera Usage Description -->
+    <key>NSCameraUsageDescription</key>
+    <string>This app requires access to the camera to scan documents.</string>
+    
+    <!-- Add other keys as needed -->
+</dict>
+</plist>
