@@ -41,42 +41,56 @@
 //        NavigationView {
 //            if isShowingSplash {
 //                // MARK: Splash Screen
-//                VStack {
-//                    Spacer()
+//                ZStack {
+//                    VStack {
+//                        Spacer(minLength: 20)
 //
-//                    // Splash Logo
-//                    Image("SplashLogo")
-//                        .resizable()
-//                        .scaledToFit()
-//                        .frame(width: 200, height: 200)
-//                        .padding()
+//                        // Logo and Welcome Text Group
+//                        VStack(spacing: 10) {
+//                            // Splash Logo
+//                            Image("SplashLogo")
+//                                .resizable()
+//                                .scaledToFit()
+//                                .frame(width: 250, height: 250)
+//                            
+//                            // Welcome Message
+//                            VStack(alignment: .center, spacing: 5) {
+//                                Text("Welcome to")
+//                                    .font(.system(size: 40, weight: .bold))
+//                                    .multilineTextAlignment(.center)
 //
-//                    // Welcome Message
-//                    Text("Welcome to SceneAloud")
-//                        .font(.largeTitle)
-//                        .bold()
-//                        .padding(.top, 20)
+//                                Text("SceneAloud!")
+//                                    .font(.system(size: 40, weight: .bold))
+//                                    .multilineTextAlignment(.center)
+//                                    .padding(.top, 5)
+//                            }
 //
-//                    Spacer()
-//
-//                    // Credits
-//                    VStack(spacing: 5) {
-//                        Text("Created by Lucy Brown")
-//                        Text("Sound Design and Graphics by Hunter Smith")
-//                    }
-//                    .font(.footnote)
-//                    .foregroundColor(.gray)
-//                    .padding(.bottom, 20)
-//                }
-//                .frame(maxWidth: .infinity, maxHeight: .infinity)
-//                .background(Color(UIColor.systemBackground))
-//                .onAppear {
-//                    // Transition to Upload Screen after 3 seconds
-//                    DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-//                        withAnimation {
-//                            isShowingSplash = false
+//                            // Instruction Text
+//                            Text("Tap the screen to continue")
+//                                .font(.body)
+//                                .padding()
+//                                .cornerRadius(10)
+//                                .padding(.top, 10)
 //                        }
+//
+//                        Spacer()
+//                        VStack(spacing: 5) {
+//                            Text("Created by Lucy Brown")
+//                            Text("Sound Design and Graphics by Abrielle Smith")
+//                        }
+//                        .font(.footnote)
+//                        .foregroundColor(.gray)
+//                        .padding(.bottom, 20)
 //                    }
+//                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+//                    .background(Color(UIColor.systemBackground))
+//                }
+//                .onTapGesture {
+//                    #if os(iOS)
+//                    withAnimation {
+//                        isShowingSplash = false
+//                    }
+//                    #endif
 //                }
 //            } else if !hasUploadedFile {
 //                // MARK: Upload Page

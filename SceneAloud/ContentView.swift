@@ -23,9 +23,6 @@ struct ContentView: View {
     @State private var synthesizer = AVSpeechSynthesizer()
     @State private var speechDelegate: AVSpeechSynthesizerDelegateWrapper?
 
-    // We store lines displayed on screen
-    @State private var visibleLines: [(character: String, line: String)] = []
-
     // When the script completes, show an alert
     @State private var showScriptCompletionAlert: Bool = false
 
@@ -178,14 +175,14 @@ struct ContentView: View {
                     }
                     .padding(.top, 20) // Additional spacing between header and settings
 
-                    // Spacer can be smaller or removed if you want less gap before "Done"
                     Spacer()
 
                     // Done Button
                     Button(action: {
+                        // Move on to the script reading page
                         isCharacterSelected = true
                         print("✅ Character Selected: \(selectedCharacter)")
-                        initializeSpeech()
+                        // NOTE: We do NOT call initializeSpeech here—onAppear in the reading page will do it.
                     }) {
                         Text("Done")
                             .font(.headline)
@@ -221,7 +218,7 @@ struct ContentView: View {
                                 }
                             }
                             .padding()
-                            .onChange(of: currentUtteranceIndex) {
+                            .onChange(of: currentUtteranceIndex) { _ in
                                 withAnimation {
                                     proxy.scrollTo(currentUtteranceIndex, anchor: .top)
                                 }
@@ -277,6 +274,7 @@ struct ContentView: View {
                         }
                     }
                 }
+                // We initialize speech here so it's only called once
                 .onAppear(perform: initializeSpeech)
             }
         }
@@ -347,6 +345,7 @@ struct ContentView: View {
                 .foregroundColor(.primary)
 
             if selectedCharacter != "NA" && entry.character == selectedCharacter {
+                // Show user’s line highlight text
                 Text("It’s your line! Press to continue.")
                     .font(.body)
                     .padding(5)
@@ -390,11 +389,14 @@ struct ContentView: View {
     // MARK: - Speech
     func initializeSpeech() {
         currentUtteranceIndex = 0
-        visibleLines = []
         isSpeaking = false
         isPaused = false
+
+        // Recreate the synthesizer fresh
         synthesizer = AVSpeechSynthesizer()
         speechDelegate = nil
+
+        // Start reading the first line
         startNextLine()
     }
 
@@ -405,9 +407,7 @@ struct ContentView: View {
         }
 
         let entry = dialogue[currentUtteranceIndex]
-        visibleLines.append(entry)
-
-        // Set isUserLine only if a specific character is selected and matches the current entry
+        // Decide if this is a user line or a spoken line
         if selectedCharacter != "NA" && entry.character == selectedCharacter {
             isUserLine = true
         } else {
@@ -417,6 +417,7 @@ struct ContentView: View {
     }
 
     private func userLineFinished() {
+        // Manually advance once user taps Continue
         currentUtteranceIndex += 1
         startNextLine()
     }
@@ -427,14 +428,14 @@ struct ContentView: View {
         utterance.postUtteranceDelay = 0.5
 
         let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
+            // When the line finishes, move to the next line
             currentUtteranceIndex += 1
             startNextLine()
         }
-
         speechDelegate = delegate
         synthesizer.delegate = delegate
 
-        synthesizer.stopSpeaking(at: .immediate)
+        // We do NOT call stopSpeaking here, so we don’t cut off anything prematurely
         synthesizer.speak(utterance)
     }
 
@@ -451,9 +452,11 @@ struct ContentView: View {
 
     // MARK: - Restart Script
     private func restartScript(keepSettings: Bool) {
+        // Stop whatever is currently speaking
         synthesizer.stopSpeaking(at: .immediate)
         synthesizer.delegate = nil
-        visibleLines.removeAll()
+
+        // Reset indices / states
         currentUtteranceIndex = 0
         isUserLine = false
 
@@ -461,9 +464,8 @@ struct ContentView: View {
             // Keep the same character and toggle values
             initializeSpeech()
         } else {
-            // Allow user to modify settings again
+            // Go back to the Settings page so user can modify them
             isCharacterSelected = false
-            // Reset to default "NA" selection
             selectedCharacter = "NA"
             displayLinesAsRead = true
         }
@@ -483,4 +485,3 @@ class AVSpeechSynthesizerDelegateWrapper: NSObject, AVSpeechSynthesizerDelegate 
         completion()
     }
 }
-
