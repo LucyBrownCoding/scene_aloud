@@ -49,7 +49,7 @@ struct ContentView: View {
                                 .resizable()
                                 .scaledToFit()
                                 .frame(width: 250, height: 250)
-                            
+
                             // Welcome Message
                             VStack(alignment: .center, spacing: 5) {
                                 Text("Welcome to")
@@ -120,7 +120,7 @@ struct ContentView: View {
                     .sheet(isPresented: $isShowingDocumentPicker) {
                         DocumentPicker(filePath: $selectedFileURL)
                     }
-                    .onChange(of: selectedFileURL) { oldValue, newValue in
+                    .onChange(of: selectedFileURL) { _, newValue in
                         if let url = newValue {
                             handleFileSelection(url: url)
                         }
@@ -182,7 +182,6 @@ struct ContentView: View {
                         // Move on to the script reading page
                         isCharacterSelected = true
                         print("✅ Character Selected: \(selectedCharacter)")
-                        // NOTE: We do NOT call initializeSpeech here—onAppear in the reading page will do it.
                     }) {
                         Text("Done")
                             .font(.headline)
@@ -192,11 +191,28 @@ struct ContentView: View {
                             .foregroundColor(.white)
                             .cornerRadius(10)
                     }
-                    .disabled(false) // Always enabled since "NA" is default
                     .padding(.bottom, 20)
                 }
                 .padding(.horizontal, 20)
                 .frame(maxHeight: .infinity, alignment: .top)
+                .navigationTitle("Settings")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    // === New "Back to Upload" button ===
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button(action: {
+                            // Return to the Upload Scripts page
+                            hasUploadedFile = false
+                            // Optionally reset the selectedFileURL, etc.
+                            selectedFileURL = nil
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.left")
+                                Text("Back to Upload")
+                            }
+                        }
+                    }
+                }
             } else {
                 // MARK: Script Reading Page
                 VStack {
@@ -261,14 +277,14 @@ struct ContentView: View {
                 .navigationTitle("SceneAloud")
                 .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
-                    // Add Back Button to the Navigation Bar
+                    // Existing back button for the script reading page
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button(action: {
                             // Call restartScript with keepSettings: false to change settings
                             restartScript(keepSettings: false)
                         }) {
                             HStack {
-                                Image(systemName: "arrow.left") // Optional: Add an arrow icon
+                                Image(systemName: "arrow.left")
                                 Text("Back")
                             }
                         }
@@ -297,7 +313,6 @@ struct ContentView: View {
 
     // MARK: - Helper Functions
 
-    // Handle File Selection
     func handleFileSelection(url: URL) {
         do {
             let content = try String(contentsOf: url, encoding: .utf8)
@@ -435,7 +450,6 @@ struct ContentView: View {
         speechDelegate = delegate
         synthesizer.delegate = delegate
 
-        // We do NOT call stopSpeaking here, so we don’t cut off anything prematurely
         synthesizer.speak(utterance)
     }
 
