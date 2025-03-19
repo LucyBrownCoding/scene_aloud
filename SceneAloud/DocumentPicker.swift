@@ -1,34 +1,31 @@
 import SwiftUI
-import UIKit
+import UniformTypeIdentifiers
+
 struct DocumentPicker: UIViewControllerRepresentable {
     @Binding var filePath: URL?
+    var allowedContentTypes: [UTType]
 
     func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-        let controller = UIDocumentPickerViewController(forOpeningContentTypes: [.plainText], asCopy: true)
-        controller.delegate = context.coordinator
-        controller.allowsMultipleSelection = false
-        return controller
+        let picker = UIDocumentPickerViewController(forOpeningContentTypes: allowedContentTypes, asCopy: true)
+        picker.delegate = context.coordinator
+        return picker
     }
 
     func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
 
     func makeCoordinator() -> Coordinator {
-        Coordinator(parent: self)
+        Coordinator(self)
     }
 
     class Coordinator: NSObject, UIDocumentPickerDelegate {
         let parent: DocumentPicker
 
-        init(parent: DocumentPicker) {
+        init(_ parent: DocumentPicker) {
             self.parent = parent
         }
 
         func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
             parent.filePath = urls.first
-        }
-
-        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-            // Handle cancellation if needed
         }
     }
 }
