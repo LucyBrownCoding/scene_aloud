@@ -1,14 +1,18 @@
-////
-////  ContentView 2.swift
-////  SceneAloud
-////
-////  Created by Lucy Brown on 3/19/25.
-////
-//
-//
 //import SwiftUI
 //import AVFoundation
 //import UIKit
+//import PDFKit  // Added for PDF support
+//import UniformTypeIdentifiers
+//
+//
+//// New enum for script input type
+//enum ScriptInputType: String, CaseIterable, Identifiable {
+//    case pdf = "PDF"
+//    case text = "Text File"
+//    case typed = "Type It"
+//    
+//    var id: String { self.rawValue }
+//}
 //
 //struct ContentView: View {
 //    // MARK: - State Variables
@@ -16,32 +20,25 @@
 //    @State private var fileContent: String = ""
 //    @State private var dialogue: [(character: String, line: String)] = []
 //    @State private var characters: [String] = []
-//    // Replace single-character selection with a set for multi-selection
 //    @State private var selectedCharacters: Set<String> = []
 //    @State private var isCharacterSelected: Bool = false
 //
-//    // Track the line reading state
 //    @State private var currentUtteranceIndex: Int = 0
 //    @State private var isSpeaking: Bool = false
 //    @State private var isPaused: Bool = false
-//
-//    // This flag indicates whether the current line belongs to the user
 //    @State private var isUserLine: Bool = false
 //
-//    // Synthesis
 //    @State private var synthesizer = AVSpeechSynthesizer()
 //    @State private var speechDelegate: AVSpeechSynthesizerDelegateWrapper?
 //
-//    // When the script completes, show an alert
 //    @State private var showScriptCompletionAlert: Bool = false
-//
-//    // Toggle for displaying lines as read
 //    @State private var displayLinesAsRead: Bool = true
 //
-//    // MARK: - State Variables for File Upload
+//    // MARK: - New State Variables for Script Input
 //    @State private var isShowingDocumentPicker: Bool = false
 //    @State private var selectedFileURL: URL? = nil
 //    @State private var hasUploadedFile: Bool = false
+//    @State private var inputType: ScriptInputType = .text  // Default to text file input
 //
 //    var body: some View {
 //        NavigationView {
@@ -50,27 +47,23 @@
 //                ZStack {
 //                    VStack {
 //                        Spacer(minLength: 20)
-//                        // Logo and Welcome Text Group
 //                        VStack(spacing: 10) {
-//                            // Replace static image with your Lottie animation if needed
 //                            Image("SplashLogo")
 //                                .resizable()
 //                                .scaledToFit()
 //                                .frame(width: 250, height: 250)
-//
-//                            // Welcome Message
+//                            
 //                            VStack(alignment: .center, spacing: 5) {
 //                                Text("Welcome to")
 //                                    .font(.system(size: 40, weight: .bold))
 //                                    .multilineTextAlignment(.center)
-//
+//                                
 //                                Text("SceneAloud!")
 //                                    .font(.system(size: 40, weight: .bold))
 //                                    .multilineTextAlignment(.center)
 //                                    .padding(.top, 5)
 //                            }
 //                            
-//                            // Instruction Text
 //                            Text("Tap the screen to continue")
 //                                .font(.body)
 //                                .padding()
@@ -97,65 +90,128 @@
 //                    #endif
 //                }
 //            } else if !hasUploadedFile {
-//                // MARK: Upload Page
+//                // MARK: Upload/Input Page
 //                VStack(spacing: 20) {
 //                    Text("Upload Your Script")
 //                        .font(.largeTitle)
 //                        .bold()
 //                        .padding(.top, 40)
-//
-//                    Text("Please upload a text file (.txt) that follows the required format.")
+//                    
+//                    Text("Is your script a PDF, a text file, or will you type it?")
 //                        .font(.body)
 //                        .multilineTextAlignment(.center)
 //                        .padding(.horizontal, 40)
-//
-//                    // Upload Button
-//                    Button(action: {
-//                        isShowingDocumentPicker = true
-//                    }) {
-//                        HStack {
-//                            Image(systemName: "doc.text.fill")
-//                                .font(.title)
-//                            Text("Select Script File")
-//                                .font(.headline)
+//                    
+//                    // Picker to select the input type
+//                    Picker("Script Input Type", selection: $inputType) {
+//                        ForEach(ScriptInputType.allCases) { type in
+//                            Text(type.rawValue).tag(type)
 //                        }
-//                        .padding()
-//                        .foregroundColor(.white)
-//                        .background(Color.blue)
-//                        .cornerRadius(10)
 //                    }
-//                    .sheet(isPresented: $isShowingDocumentPicker) {
-//                        DocumentPicker(filePath: $selectedFileURL)
-//                    }
-//                    .onChange(of: selectedFileURL) { _, newValue in
-//                        if let url = newValue {
-//                            handleFileSelection(url: url)
+//                    .pickerStyle(SegmentedPickerStyle())
+//                    .padding(.horizontal, 40)
+//                    
+//                    // Show appropriate view based on inputType
+//                    if inputType == .typed {
+//                        // For typed input, show a TextEditor.
+//                        TextEditor(text: $fileContent)
+//                            .frame(height: 200)
+//                            .border(Color.gray, width: 1)
+//                            .padding(.horizontal, 40)
+//                        
+//                        Button(action: {
+//                            self.dialogue = self.extractDialogue(from: fileContent)
+//                            let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
+//                            self.characters = extractedCharacters
+//                            self.hasUploadedFile = true
+//                        }) {
+//                            Text("Submit Script")
+//                                .font(.headline)
+//                                .padding()
+//                                .foregroundColor(.white)
+//                                .background(Color.blue)
+//                                .cornerRadius(10)
+//                        }
+//                        .padding(.top, 10)
+//                    } else if inputType == .pdf {
+//                        // For PDF input, show a message with a ChatGPT prompt instead of allowing PDF uploads.
+//                        VStack(spacing: 20) {
+//                            Text("Hello! To keep this app free, PDF conversion isn’t supported. Instead, copy the prompt below into ChatGPT(or any similar AI tool) and attach your script PDF to convert your PDF to a text file for free.")
+//                                .font(.body)
+//                                .multilineTextAlignment(.center)
+//                                .padding(.horizontal, 40)
+//                            
+//                            Button(action: {
+//                                        UIPasteboard.general.string = """
+//                                        I have a PDF file attached that contains a script. Please extract all the text from every page, preserving the original layout (including line breaks and paragraphs), and output only the extracted text in plain text file—nothing else.
+//                                        """
+//                                    }) {
+//                                        Text("Copy ChatGPT Prompt")
+//                                            .font(.headline)
+//                                            .padding()
+//                                            .foregroundColor(.white)
+//                                            .background(Color.blue)
+//                                            .cornerRadius(10)
+//                                    }
+//                                    
+//                                    Button(action: {
+//                                        if let url = URL(string: "https://chat.openai.com/") {
+//                                            UIApplication.shared.open(url)
+//                                        }
+//                                    }) {
+//                                        Text("Go to ChatGPT")
+//                                            .font(.headline)
+//                                            .padding()
+//                                            .foregroundColor(.white)
+//                                            .background(Color.green)
+//                                            .cornerRadius(10)
+//                                    }
+//                        }
+//                    } else {
+//                        // For text file input, show the file selection button.
+//                        Button(action: {
+//                            isShowingDocumentPicker = true
+//                        }) {
+//                            HStack {
+//                                Image(systemName: "doc.text.fill")
+//                                    .font(.title)
+//                                Text("Select Text File")
+//                                    .font(.headline)
+//                            }
+//                            .padding()
+//                            .foregroundColor(.white)
+//                            .background(Color.blue)
+//                            .cornerRadius(10)
+//                        }
+//                        .sheet(isPresented: $isShowingDocumentPicker) {
+//                            DocumentPicker(filePath: $selectedFileURL, allowedContentTypes: [UTType.plainText])
+//                        }
+//                        .onChange(of: selectedFileURL) { _, newValue in
+//                            if let url = newValue {
+//                                handleFileSelection(url: url)
+//                            }
 //                        }
 //                    }
 //                    
 //                    Spacer()
 //                }
 //                .padding()
-//            } // MARK: Settings Page
-//            else if !isCharacterSelected {
+//            } else if !isCharacterSelected {
+//                // MARK: Settings Page
 //                VStack(alignment: .leading) {
-//                    // Settings Header
 //                    Text("Settings")
 //                        .font(.largeTitle)
 //                        .bold()
 //                        .padding(.top, 20)
 //                    
-//                    // Multi-selection of characters
 //                    Text("Select your characters")
 //                        .font(.title2)
 //                        .padding(.vertical, 5)
 //                    
-//                    // "Not Applicable" Toggle at the top
 //                    Toggle("Not Applicable", isOn: Binding(
 //                        get: { selectedCharacters.contains("Not Applicable") },
 //                        set: { newValue in
 //                            if newValue {
-//                                // If turning on "Not Applicable", clear all selections and add it.
 //                                selectedCharacters = ["Not Applicable"]
 //                            } else {
 //                                selectedCharacters.remove("Not Applicable")
@@ -164,14 +220,11 @@
 //                    ))
 //                    .padding(.vertical, 2)
 //                    
-//                    // List toggles for the characters from the script.
 //                    ForEach(characters, id: \.self) { character in
-//                        // Create a toggle for each character.
 //                        Toggle(character.capitalized, isOn: Binding(
 //                            get: { selectedCharacters.contains(character) },
 //                            set: { newValue in
 //                                if newValue {
-//                                    // If selecting any specific character, remove "Not Applicable" if present.
 //                                    selectedCharacters.remove("Not Applicable")
 //                                    selectedCharacters.insert(character)
 //                                } else {
@@ -182,7 +235,6 @@
 //                        .padding(.vertical, 2)
 //                    }
 //                    
-//                    // Toggle for displaying lines as read.
 //                    VStack(alignment: .leading, spacing: 10) {
 //                        Text("Display lines as read")
 //                            .font(.title2)
@@ -194,7 +246,6 @@
 //                    
 //                    Spacer()
 //                    
-//                    // Done Button to move to the script reading page.
 //                    Button(action: {
 //                        isCharacterSelected = true
 //                        print("✅ Characters Selected: \(selectedCharacters)")
@@ -255,7 +306,6 @@
 //                    }
 //                    .background(Color(UIColor.systemBackground))
 //                    
-//                    // Action Buttons
 //                    VStack {
 //                        if isUserLine {
 //                            Button(action: {
@@ -320,16 +370,36 @@
 //    
 //    func handleFileSelection(url: URL) {
 //        do {
-//            let content = try String(contentsOf: url, encoding: .utf8)
-//            self.fileContent = content
-//            self.dialogue = self.extractDialogue(from: content)
+//            if inputType == .pdf {
+//                // Extract text from a PDF using attributed strings.
+//                if let pdfDocument = PDFDocument(url: url) {
+//                    let pageCount = pdfDocument.pageCount
+//                    let documentContent = NSMutableAttributedString()
+//                    
+//                    // Iterate over all pages.
+//                    for i in 0..<pageCount {
+//                        if let page = pdfDocument.page(at: i),
+//                           let pageContent = page.attributedString {
+//                            documentContent.append(pageContent)
+//                        }
+//                    }
+//                    self.fileContent = documentContent.string
+//                } else {
+//                    self.fileContent = "Error loading PDF content."
+//                }
+//            } else {
+//                // For text files, simply load the content as before.
+//                self.fileContent = try String(contentsOf: url, encoding: .utf8)
+//            }
+//            
+//            // Process the extracted content.
+//            self.dialogue = self.extractDialogue(from: fileContent)
 //            
 //            if dialogue.isEmpty {
 //                print("⚠️ The file is empty or has no valid lines with a colon.")
 //            }
 //            
-//            var extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
-//            
+//            let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
 //            self.characters = extractedCharacters
 //            
 //            print("✅ Characters Loaded: \(characters)")
@@ -348,7 +418,6 @@
 //                .font(.headline)
 //                .foregroundColor(.primary)
 //            
-//            // If "Not Applicable" is selected, always show the line text.
 //            if selectedCharacters.contains("Not Applicable") {
 //                Text(entry.line)
 //                    .font(.body)
@@ -358,7 +427,6 @@
 //                    )
 //                    .cornerRadius(5)
 //            } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
-//                // For user-selected characters, prompt for a line.
 //                Text("It’s your line! Press to continue.")
 //                    .font(.body)
 //                    .padding(5)
@@ -368,7 +436,6 @@
 //                    )
 //                    .cornerRadius(5)
 //            } else {
-//                // Otherwise, simply show the script's line.
 //                Text(entry.line)
 //                    .font(.body)
 //                    .padding(5)
@@ -421,14 +488,11 @@
 //        
 //        let entry = dialogue[currentUtteranceIndex]
 //        if selectedCharacters.contains("Not Applicable") {
-//            // If "Not Applicable" is selected, always auto-read the line.
 //            isUserLine = false
 //            speakLine(entry.line)
 //        } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
-//            // If the current line belongs to one of the user-selected characters, mark it as a user line.
 //            isUserLine = true
 //        } else {
-//            // Otherwise, auto-read the line.
 //            isUserLine = false
 //            speakLine(entry.line)
 //        }
@@ -465,7 +529,6 @@
 //        }
 //    }
 //    
-//    // MARK: - Restart Script
 //    private func restartScript(keepSettings: Bool) {
 //        synthesizer.stopSpeaking(at: .immediate)
 //        synthesizer.delegate = nil
@@ -477,16 +540,13 @@
 //            initializeSpeech()
 //        } else {
 //            isCharacterSelected = false
-//            selectedCharacters = [] // Reset selection
+//            selectedCharacters = []
 //            displayLinesAsRead = true
 //        }
 //    }
 //    
-//    // MARK: - Color Mapping for Characters
 //    func colorForCharacter(_ character: String) -> Color {
-//        // Define a palette of colors excluding green and yellow.
 //        let colors: [Color] = [.orange, .blue, .pink, .purple, .red, .teal]
-//        // To have a consistent mapping, sort the selected characters.
 //        let sortedSelections = selectedCharacters.sorted()
 //        if let index = sortedSelections.firstIndex(of: character) {
 //            return colors[index % colors.count]
@@ -508,42 +568,3 @@
 //        completion()
 //    }
 //}
-
-
-
-//MARK: Document Picker
-//import SwiftUI
-//import UIKit
-//struct DocumentPicker: UIViewControllerRepresentable {
-//    @Binding var filePath: URL?
-//
-//    func makeUIViewController(context: Context) -> UIDocumentPickerViewController {
-//        let controller = UIDocumentPickerViewController(forOpeningContentTypes: [.plainText], asCopy: true)
-//        controller.delegate = context.coordinator
-//        controller.allowsMultipleSelection = false
-//        return controller
-//    }
-//
-//    func updateUIViewController(_ uiViewController: UIDocumentPickerViewController, context: Context) {}
-//
-//    func makeCoordinator() -> Coordinator {
-//        Coordinator(parent: self)
-//    }
-//
-//    class Coordinator: NSObject, UIDocumentPickerDelegate {
-//        let parent: DocumentPicker
-//
-//        init(parent: DocumentPicker) {
-//            self.parent = parent
-//        }
-//
-//        func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
-//            parent.filePath = urls.first
-//        }
-//
-//        func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
-//            // Handle cancellation if needed
-//        }
-//    }
-//}
-//

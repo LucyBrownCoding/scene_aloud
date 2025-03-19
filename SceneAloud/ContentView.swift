@@ -120,7 +120,10 @@ struct ContentView: View {
                             .padding(.horizontal, 40)
                         
                         Button(action: {
-                            self.dialogue = self.extractDialogue(from: fileContent)
+                            // First, convert the script text to the correct format.
+                            let convertedScript = convertScriptToCorrectFormat(from: fileContent)
+                            // Then extract the dialogue.
+                            self.dialogue = self.extractDialogue(from: convertedScript)
                             let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
                             self.characters = extractedCharacters
                             self.hasUploadedFile = true
@@ -366,17 +369,56 @@ struct ContentView: View {
         }
     }
     
-    // MARK: - Helper Functions
     
+    // MARK: Script Conversion Function
+    // MARK: - Script Conversion Function
+    func convertScriptToCorrectFormat(from text: String) -> String {
+        let lines = text.components(separatedBy: .newlines)
+        var convertedLines: [String] = []
+        var i = 0
+
+        while i < lines.count {
+            let currentLine = lines[i].trimmingCharacters(in: .whitespacesAndNewlines)
+            if currentLine.isEmpty {
+                i += 1
+                continue
+            }
+            
+            // Check if current line appears to be a character name:
+            // It is all uppercase and does not contain a colon.
+            if currentLine == currentLine.uppercased() && !currentLine.contains(":") {
+                // Check if there's a next line
+                if i + 1 < lines.count {
+                    let nextLine = lines[i+1].trimmingCharacters(in: .whitespacesAndNewlines)
+                    // If the next line is not empty and does not look like a character name,
+                    // assume it's dialogue.
+                    if !nextLine.isEmpty && nextLine != nextLine.uppercased() {
+                        // Combine current and next line
+                        let combinedLine = "\(currentLine): \(nextLine)"
+                        convertedLines.append(combinedLine)
+                        i += 2
+                        continue
+                    }
+                }
+            }
+            
+            // Otherwise, add the current line as is.
+            convertedLines.append(currentLine)
+            i += 1
+        }
+        
+        return convertedLines.joined(separator: "\n")
+    }
+    
+    // MARK: - Helper Functions
     func handleFileSelection(url: URL) {
         do {
             if inputType == .pdf {
-                // Extract text from a PDF using attributed strings.
+                // (Your PDF extraction code here)
                 if let pdfDocument = PDFDocument(url: url) {
                     let pageCount = pdfDocument.pageCount
                     let documentContent = NSMutableAttributedString()
                     
-                    // Iterate over all pages.
                     for i in 0..<pageCount {
                         if let page = pdfDocument.page(at: i),
                            let pageContent = page.attributedString {
@@ -388,12 +430,13 @@ struct ContentView: View {
                     self.fileContent = "Error loading PDF content."
                 }
             } else {
-                // For text files, simply load the content as before.
+                // For text files, load the content as before.
                 self.fileContent = try String(contentsOf: url, encoding: .utf8)
             }
             
-            // Process the extracted content.
-            self.dialogue = self.extractDialogue(from: fileContent)
+            // Convert the file content to the correct format before extracting dialogue.
+            let convertedScript = convertScriptToCorrectFormat(from: fileContent)
+            self.dialogue = self.extractDialogue(from: convertedScript)
             
             if dialogue.isEmpty {
                 print("⚠️ The file is empty or has no valid lines with a colon.")
