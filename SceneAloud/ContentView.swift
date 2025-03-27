@@ -1,9 +1,9 @@
 import SwiftUI
 import AVFoundation
 import UIKit
-import PDFKit  // Added for PDF support
+import PDFKit
 import UniformTypeIdentifiers
-
+import AVKit
 
 // New enum for script input type
 enum ScriptInputType: String, CaseIterable, Identifiable {
@@ -39,55 +39,78 @@ struct ContentView: View {
     @State private var selectedFileURL: URL? = nil
     @State private var hasUploadedFile: Bool = false
     @State private var inputType: ScriptInputType = .text  // Default to text file input
-
+    @State private var splashPlayer = AVPlayer()
+    @State private var videoFinished = false
+    
     var body: some View {
         NavigationView {
             if isShowingSplash {
-                // MARK: Splash Screen
                 ZStack {
-                    VStack {
-                        Spacer(minLength: 20)
-                        VStack(spacing: 10) {
-                            Image("SplashLogo")
-                                .resizable()
-                                .scaledToFit()
-                                .frame(width: 250, height: 250)
-                            
-                            VStack(alignment: .center, spacing: 5) {
-                                Text("Welcome to")
-                                    .font(.system(size: 40, weight: .bold))
-                                    .multilineTextAlignment(.center)
-                                
-                                Text("SceneAloud!")
-                                    .font(.system(size: 40, weight: .bold))
-                                    .multilineTextAlignment(.center)
-                                    .padding(.top, 5)
+                    VideoPlayer(player: splashPlayer)
+                        .ignoresSafeArea()
+                        .allowsHitTesting(false)
+                        .onAppear {
+                            if let url = Bundle.main.url(forResource: "GangleLogoAnimFinalish", withExtension: "mp4") {
+                                splashPlayer = AVPlayer(url: url)
+                                splashPlayer.play()
+                                NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: splashPlayer.currentItem, queue: .main) { _ in
+                                    withAnimation {
+                                        videoFinished = true
+                                    }
+                                }
+                            } else {
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
+                                    withAnimation {
+                                        videoFinished = true
+                                    }
+                                }
                             }
-                            
-                            Text("Tap the screen to continue")
-                                .font(.body)
-                                .padding()
-                                .cornerRadius(10)
-                                .padding(.top, 0)
                         }
+                    
+                    // Overlay content: welcome text at the top and bottom section with "Tap to continue" above credits
+                    VStack {
+                        // Top-aligned welcome text
+                        VStack(spacing: 10) {
+                            Text("Welcome to")
+                                .font(.system(size: 40, weight: .bold))
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.center)
+                            
+                            Text("SceneAloud!")
+                                .font(.system(size: 40, weight: .bold))
+                                .foregroundColor(.white)
+                                .multilineTextAlignment(.center)
+                                .padding(.top, 5)
+                        }
+                        .padding(.top, 40)
+                        
                         Spacer()
+                        
+                        // Bottom section: "Tap to continue" text (shown only after video finishes) above the credits
+                        if videoFinished {
+                            Text("Tap to continue")
+                                .font(.headline)
+                                .foregroundColor(.white)
+                                .padding(.bottom, 10)
+                        }
+                        
                         VStack(spacing: 5) {
                             Text("Created by Lucy Brown")
                             Text("Sound Design and Logo by Abrielle Smith")
                         }
                         .font(.footnote)
-                        .foregroundColor(.gray)
+                        .foregroundColor(.white)
                         .padding(.bottom, 20)
                     }
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(Color(UIColor.systemBackground))
+                    .padding(.horizontal)
                 }
+                // Tap anywhere on the screen to continue after the video has finished.
                 .onTapGesture {
-                    #if os(iOS)
-                    withAnimation {
-                        isShowingSplash = false
+                    if videoFinished {
+                        withAnimation {
+                            isShowingSplash = false
+                        }
                     }
-                    #endif
                 }
             } else if !hasUploadedFile {
                 // MARK: Upload/Input Page
@@ -373,27 +396,39 @@ struct ContentView: View {
     // MARK: Script Conversion Function
     // MARK: - Script Conversion Function
     func convertScriptToCorrectFormat(from text: String) -> String {
+        // Split the text into individual lines
         let lines = text.components(separatedBy: .newlines)
         var convertedLines: [String] = []
         var i = 0
 
         while i < lines.count {
-            let currentLine = lines[i].trimmingCharacters(in: .whitespacesAndNewlines)
+            // Trim whitespace and remove any parenthetical text
+            var currentLine = lines[i].trimmingCharacters(in: .whitespacesAndNewlines)
+            currentLine = currentLine.replacingOccurrences(of: "\\(.*?\\)", with: "", options: .regularExpression)
+
+            // Skip empty lines
             if currentLine.isEmpty {
                 i += 1
                 continue
             }
-            
-            // Check if current line appears to be a character name:
-            // It is all uppercase and does not contain a colon.
+
+            // Skip lines that are likely scene numbers (e.g. lines containing only digits)
+            let digitSet = CharacterSet.decimalDigits
+            let currentCharacterSet = CharacterSet(charactersIn: currentLine)
+            if digitSet.isSuperset(of: currentCharacterSet) {
+                i += 1
+                continue
+            }
+
+            // If the current line is all uppercase and does not contain a colon, assume it's a character name
             if currentLine == currentLine.uppercased() && !currentLine.contains(":") {
-                // Check if there's a next line
+                // Check if there's a following line for dialogue
                 if i + 1 < lines.count {
-                    let nextLine = lines[i+1].trimmingCharacters(in: .whitespacesAndNewlines)
-                    // If the next line is not empty and does not look like a character name,
-                    // assume it's dialogue.
+                    var nextLine = lines[i+1].trimmingCharacters(in: .whitespacesAndNewlines)
+                    nextLine = nextLine.replacingOccurrences(of: "\\(.*?\\)", with: "", options: .regularExpression)
+                    
+                    // If the next line is not empty and is not all uppercase, combine them
                     if !nextLine.isEmpty && nextLine != nextLine.uppercased() {
-                        // Combine current and next line
                         let combinedLine = "\(currentLine): \(nextLine)"
                         convertedLines.append(combinedLine)
                         i += 2
@@ -402,8 +437,11 @@ struct ContentView: View {
                 }
             }
             
-            // Otherwise, add the current line as is.
-            convertedLines.append(currentLine)
+            // If the line already contains a colon, assume it's in the correct format
+            if currentLine.contains(":") {
+                convertedLines.append(currentLine)
+            }
+
             i += 1
         }
         
