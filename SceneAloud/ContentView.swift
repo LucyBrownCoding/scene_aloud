@@ -41,31 +41,24 @@ struct ContentView: View {
     @State private var inputType: ScriptInputType = .text  // Default to text file input
     @State private var splashPlayer = AVPlayer()
     @State private var videoFinished = false
-    
-    @State private var isShowingClosing: Bool = false
-    @State private var closingPlayer = AVPlayer()
-    @State private var pendingRestartKeepSettings: Bool? = nil
 
     var body: some View {
         NavigationView {
             if isShowingSplash {
                 ZStack {
-                    CustomVideoPlayer(player: splashPlayer)
+                    VideoPlayer(player: splashPlayer)
                         .ignoresSafeArea()
                         .allowsHitTesting(false)
                         .onAppear {
                             if let url = Bundle.main.url(forResource: "Opening animation", withExtension: "mov") {
-                                print("Opening animation URL: \(url)") //temporary
                                 splashPlayer = AVPlayer(url: url)
                                 splashPlayer.play()
-                                print("Splash player is playing, rate: \(splashPlayer.rate)") //test
                                 NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: splashPlayer.currentItem, queue: .main) { _ in
                                     withAnimation {
                                         videoFinished = true
                                     }
                                 }
                             } else {
-                                print("Opening animation file not found!") //temporary
                                 DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
                                     withAnimation {
                                         videoFinished = true
@@ -106,7 +99,7 @@ struct ContentView: View {
                             Text("Sound Design and Logo by Abrielle Smith")
                         }
                         .font(.footnote)
-                        .foregroundColor(.gray)
+                        .foregroundColor(.white)
                         .padding(.bottom, 20)
                     }
                     .padding(.horizontal)
@@ -116,74 +109,10 @@ struct ContentView: View {
                     if videoFinished {
                         withAnimation {
                             isShowingSplash = false
-                            isShowingClosing = true
                         }
                     }
                 }
-            }
-            else if isShowingClosing {
-                ZStack {
-                    CustomVideoPlayer(player: closingPlayer)
-                        .ignoresSafeArea()
-                        .allowsHitTesting(false)
-                        .onAppear {
-                            if let url = Bundle.main.url(forResource: "Closing animation", withExtension: "mp4") {
-                                print("Closing animation URL: \(url)") // temporary debug
-                                closingPlayer = AVPlayer(url: url)
-                                closingPlayer.play()
-                                print("Closing player is playing, rate: \(closingPlayer.rate)") // corrected debug
-                                NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: closingPlayer.currentItem, queue: .main) { _ in
-                                    withAnimation {
-                                        isShowingClosing = false
-                                    }
-                                }
-                            } else {
-                                print("Closing animation file not found!") // temporary debug
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                                    withAnimation {
-                                        isShowingClosing = false
-                                    }
-                                }
-                            }
-                        }
-                    
-                    // Overlay text (same as in the splash screen)
-                    VStack {
-                        // Top-aligned welcome text
-                        VStack(spacing: 10) {
-                            Text("Welcome to")
-                                .font(.system(size: 40, weight: .bold))
-                                .foregroundColor(.white)
-                                .multilineTextAlignment(.center)
-                            
-                            Text("SceneAloud!")
-                                .font(.system(size: 40, weight: .bold))
-                                .foregroundColor(.white)
-                                .multilineTextAlignment(.center)
-                                .padding(.top, 5)
-                        }
-                        .padding(.top, 40)
-                        
-                        Spacer()
-                        
-                        // Optionally, you can remove or modify the "Tap to continue" text if not needed during closing
-                        Text("Tap to continue")
-                            .font(.headline)
-                            .foregroundColor(.white)
-                            .padding(.bottom, 10)
-                        
-                        VStack(spacing: 5) {
-                            Text("Created by Lucy Brown")
-                            Text("Sound Design and Logo by Abrielle Smith")
-                        }
-                        .font(.footnote)
-                        .foregroundColor(.gray)
-                        .padding(.bottom, 20)
-                    }
-                    .padding(.horizontal)
-                }
-            }
-            else if !hasUploadedFile {
+            } else if !hasUploadedFile {
                 // MARK: Upload/Input Page
                 VStack(spacing: 20) {
                     Text("Upload Your Script")
