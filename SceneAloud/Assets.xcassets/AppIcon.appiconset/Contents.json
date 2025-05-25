@@ -1,7 +1,7 @@
 {
   "images" : [
     {
-      "filename" : "ScenealoudLogoRaster.png",
+      "filename" : "SceneAloud_LogoBlack 1.png",
       "idiom" : "universal",
       "platform" : "ios",
       "size" : "1024x1024"
@@ -74,6 +74,7 @@
       "size" : "512x512"
     },
     {
+      "filename" : "SceneAloud_LogoBlack.png",
       "idiom" : "mac",
       "scale" : "2x",
       "size" : "512x512"

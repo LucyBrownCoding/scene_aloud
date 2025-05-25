@@ -10,7 +10,7 @@
 //    case pdf = "PDF"
 //    case text = "Text File"
 //    case typed = "Type It"
-//    
+//
 //    var id: String { self.rawValue }
 //}
 //
@@ -41,76 +41,50 @@
 //    @State private var inputType: ScriptInputType = .text  // Default to text file input
 //    @State private var splashPlayer = AVPlayer()
 //    @State private var videoFinished = false
-//    
+//    @Environment(\.colorScheme) private var colorScheme
+//
 //    var body: some View {
 //        NavigationView {
-//            if isShowingSplash {
+//        if isShowingSplash {
 //                ZStack {
-//                    VideoPlayer(player: splashPlayer)
+//                    // Full-screen background so taps register everywhere
+//                    Color(colorScheme == .dark ? .black : .white)
 //                        .ignoresSafeArea()
-//                        .allowsHitTesting(false)
-//                        .onAppear {
-//                            if let url = Bundle.main.url(forResource: "GangleLogoAnimFinalish", withExtension: "mp4") {
-//                                splashPlayer = AVPlayer(url: url)
-//                                splashPlayer.play()
-//                                NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: splashPlayer.currentItem, queue: .main) { _ in
-//                                    withAnimation {
-//                                        videoFinished = true
-//                                    }
-//                                }
-//                            } else {
-//                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-//                                    withAnimation {
-//                                        videoFinished = true
-//                                    }
-//                                }
-//                            }
-//                        }
-//                    
-//                    // Overlay content: welcome text at the top and bottom section with "Tap to continue" above credits
+//
+//                    // Overlay content: welcome text at the top and bottom section with credits
 //                    VStack {
 //                        // Top-aligned welcome text
 //                        VStack(spacing: 10) {
 //                            Text("Welcome to")
 //                                .font(.system(size: 40, weight: .bold))
-//                                .foregroundColor(.white)
+//                                .foregroundColor(colorScheme == .dark ? .white : .black)
 //                                .multilineTextAlignment(.center)
-//                            
+//
 //                            Text("SceneAloud!")
 //                                .font(.system(size: 40, weight: .bold))
-//                                .foregroundColor(.white)
+//                                .foregroundColor(colorScheme == .dark ? .white : .black)
 //                                .multilineTextAlignment(.center)
 //                                .padding(.top, 5)
 //                        }
 //                        .padding(.top, 40)
-//                        
+//
 //                        Spacer()
-//                        
-//                        // Bottom section: "Tap to continue" text (shown only after video finishes) above the credits
-//                        if videoFinished {
-//                            Text("Tap to continue")
-//                                .font(.headline)
-//                                .foregroundColor(.white)
-//                                .padding(.bottom, 10)
-//                        }
-//                        
+//
+//                        // Bottom section: credits
 //                        VStack(spacing: 5) {
 //                            Text("Created by Lucy Brown")
 //                            Text("Sound Design and Logo by Abrielle Smith")
 //                        }
 //                        .font(.footnote)
-//                        .foregroundColor(.white)
+//                        .foregroundColor(.gray)
 //                        .padding(.bottom, 20)
 //                    }
 //                    .padding(.horizontal)
 //                }
-//                // Tap anywhere on the screen to continue after the video has finished.
+//                .frame(maxWidth: .infinity, maxHeight: .infinity)     // Fill entire screen
+//                .contentShape(Rectangle())                              // Make blank areas tappable
 //                .onTapGesture {
-//                    if videoFinished {
-//                        withAnimation {
-//                            isShowingSplash = false
-//                        }
-//                    }
+//                    isShowingSplash = false
 //                }
 //            } else if !hasUploadedFile {
 //                // MARK: Upload/Input Page
@@ -119,12 +93,12 @@
 //                        .font(.largeTitle)
 //                        .bold()
 //                        .padding(.top, 40)
-//                    
+//
 //                    Text("Is your script a PDF, a text file, or will you type it?")
 //                        .font(.body)
 //                        .multilineTextAlignment(.center)
 //                        .padding(.horizontal, 40)
-//                    
+//
 //                    // Picker to select the input type
 //                    Picker("Script Input Type", selection: $inputType) {
 //                        ForEach(ScriptInputType.allCases) { type in
@@ -133,7 +107,7 @@
 //                    }
 //                    .pickerStyle(SegmentedPickerStyle())
 //                    .padding(.horizontal, 40)
-//                    
+//
 //                    // Show appropriate view based on inputType
 //                    if inputType == .typed {
 //                        // For typed input, show a TextEditor.
@@ -141,7 +115,7 @@
 //                            .frame(height: 200)
 //                            .border(Color.gray, width: 1)
 //                            .padding(.horizontal, 40)
-//                        
+//
 //                        Button(action: {
 //                            // First, convert the script text to the correct format.
 //                            let convertedScript = convertScriptToCorrectFormat(from: fileContent)
@@ -162,24 +136,38 @@
 //                    } else if inputType == .pdf {
 //                        // For PDF input, show a message with a ChatGPT prompt instead of allowing PDF uploads.
 //                        VStack(spacing: 20) {
-//                            Text("Hello! To keep this app free, PDF conversion isn’t supported. Instead, copy the prompt below into ChatGPT(or any similar AI tool) and attach your script PDF to convert your PDF to a text file for free.")
+//                            Text("Hello! To keep this app free, PDF conversion isn’t supported. Instead, copy the prompt below into ChatGPT or Claude AI(or any similar AI tool) and attach your script PDF to convert your PDF to a text file for free.")
 //                                .font(.body)
 //                                .multilineTextAlignment(.center)
 //                                .padding(.horizontal, 40)
-//                            
+//
 //                            Button(action: {
 //                                        UIPasteboard.general.string = """
-//                                        I have a PDF file attached that contains a script. Please extract all the text from every page, preserving the original layout (including line breaks and paragraphs), and output only the extracted text in plain text file—nothing else.
+//                                        I have a PDF file attached that contains the script for a play.  The script contains scene descriptions, parenthetical notations, and most importantly, the lines each character should read.  Scene descriptions will often be written in italics.
+//
+//                                        Your job is to extract the character lines, and nothing else.   It is important for you to extract all of the lines until you reach the end of the play.  The end of the play will often be indicated by "END OF PLAY" or something similar.
+//
+//                                        Please return the lines in the following format:
+//
+//                                        "Character name: Line"
+//
+//                                        If the text in the PDF isn’t extractable using standard methods, please use OCR to extract the text from the pages.
+//                                        If the process takes too long and is interrupted, to make this more manageable, extract the character lines one page at a time.
+//
+//                                        You do not need to ask me if it is ok to use more sophisticated OCR techniques, and you don’t need to ask me each time you finish a page.
+//                                        I want you to extract all of the lines until you reach the end of the play.  If you need to do this page by page, do so without asking me if it’s ok.
+//
+//                                        Once you have finished all the pages, please consolidate all of the prior lines from all pages into a single file, and allow me to download the file.  Make sure the lines are in the original order.
 //                                        """
 //                                    }) {
-//                                        Text("Copy ChatGPT Prompt")
+//                                        Text("Copy Prompt")
 //                                            .font(.headline)
 //                                            .padding()
 //                                            .foregroundColor(.white)
 //                                            .background(Color.blue)
 //                                            .cornerRadius(10)
 //                                    }
-//                                    
+//
 //                                    Button(action: {
 //                                        if let url = URL(string: "https://chat.openai.com/") {
 //                                            UIApplication.shared.open(url)
@@ -192,6 +180,20 @@
 //                                            .background(Color.green)
 //                                            .cornerRadius(10)
 //                                    }
+//                            
+//                                    Button(action: {
+//                                        if let url = URL(string: "https://claude.ai/new") {
+//                                            UIApplication.shared.open(url)
+//                                        }
+//                                    }) {
+//                                        Text("Go to Claude AI")
+//                                            .font(.headline)
+//                                            .padding()
+//                                            .foregroundColor(.white)
+//                                            .background(Color.green)
+//                                            .cornerRadius(10)
+//                                    }
+//                                    
 //                        }
 //                    } else {
 //                        // For text file input, show the file selection button.
@@ -218,7 +220,7 @@
 //                            }
 //                        }
 //                    }
-//                    
+//
 //                    Spacer()
 //                }
 //                .padding()
@@ -229,11 +231,11 @@
 //                        .font(.largeTitle)
 //                        .bold()
 //                        .padding(.top, 20)
-//                    
+//
 //                    Text("Select your characters")
 //                        .font(.title2)
 //                        .padding(.vertical, 5)
-//                    
+//
 //                    Toggle("Not Applicable", isOn: Binding(
 //                        get: { selectedCharacters.contains("Not Applicable") },
 //                        set: { newValue in
@@ -245,7 +247,7 @@
 //                        }
 //                    ))
 //                    .padding(.vertical, 2)
-//                    
+//
 //                    ForEach(characters, id: \.self) { character in
 //                        Toggle(character.capitalized, isOn: Binding(
 //                            get: { selectedCharacters.contains(character) },
@@ -260,18 +262,18 @@
 //                        ))
 //                        .padding(.vertical, 2)
 //                    }
-//                    
+//
 //                    VStack(alignment: .leading, spacing: 10) {
 //                        Text("Display lines as read")
 //                            .font(.title2)
-//                        
+//
 //                        Toggle("", isOn: $displayLinesAsRead)
 //                            .labelsHidden()
 //                    }
 //                    .padding(.top, 20)
-//                    
+//
 //                    Spacer()
-//                    
+//
 //                    Button(action: {
 //                        isCharacterSelected = true
 //                        print("✅ Characters Selected: \(selectedCharacters)")
@@ -311,7 +313,7 @@
 //                            VStack(alignment: .leading, spacing: 10) {
 //                                ForEach(dialogue.indices, id: \.self) { index in
 //                                    let entry = dialogue[index]
-//                                    
+//
 //                                    if displayLinesAsRead {
 //                                        if index <= currentUtteranceIndex {
 //                                            lineView(for: entry, at: index)
@@ -331,7 +333,7 @@
 //                        .background(Color(UIColor.systemBackground))
 //                    }
 //                    .background(Color(UIColor.systemBackground))
-//                    
+//
 //                    VStack {
 //                        if isUserLine {
 //                            Button(action: {
@@ -391,8 +393,8 @@
 //            )
 //        }
 //    }
-//    
-//    
+//
+//
 //    // MARK: Script Conversion Function
 //    // MARK: - Script Conversion Function
 //    func convertScriptToCorrectFormat(from text: String) -> String {
@@ -426,7 +428,7 @@
 //                if i + 1 < lines.count {
 //                    var nextLine = lines[i+1].trimmingCharacters(in: .whitespacesAndNewlines)
 //                    nextLine = nextLine.replacingOccurrences(of: "\\(.*?\\)", with: "", options: .regularExpression)
-//                    
+//
 //                    // If the next line is not empty and is not all uppercase, combine them
 //                    if !nextLine.isEmpty && nextLine != nextLine.uppercased() {
 //                        let combinedLine = "\(currentLine): \(nextLine)"
@@ -436,7 +438,7 @@
 //                    }
 //                }
 //            }
-//            
+//
 //            // If the line already contains a colon, assume it's in the correct format
 //            if currentLine.contains(":") {
 //                convertedLines.append(currentLine)
@@ -444,10 +446,10 @@
 //
 //            i += 1
 //        }
-//        
+//
 //        return convertedLines.joined(separator: "\n")
 //    }
-//    
+//
 //    // MARK: - Helper Functions
 //    func handleFileSelection(url: URL) {
 //        do {
@@ -456,7 +458,7 @@
 //                if let pdfDocument = PDFDocument(url: url) {
 //                    let pageCount = pdfDocument.pageCount
 //                    let documentContent = NSMutableAttributedString()
-//                    
+//
 //                    for i in 0..<pageCount {
 //                        if let page = pdfDocument.page(at: i),
 //                           let pageContent = page.attributedString {
@@ -471,34 +473,34 @@
 //                // For text files, load the content as before.
 //                self.fileContent = try String(contentsOf: url, encoding: .utf8)
 //            }
-//            
+//
 //            // Convert the file content to the correct format before extracting dialogue.
 //            let convertedScript = convertScriptToCorrectFormat(from: fileContent)
 //            self.dialogue = self.extractDialogue(from: convertedScript)
-//            
+//
 //            if dialogue.isEmpty {
 //                print("⚠️ The file is empty or has no valid lines with a colon.")
 //            }
-//            
+//
 //            let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
 //            self.characters = extractedCharacters
-//            
+//
 //            print("✅ Characters Loaded: \(characters)")
-//            
+//
 //            self.hasUploadedFile = true
 //        } catch {
 //            self.fileContent = "Error loading file content."
 //            print("❌ Error loading file content: \(error.localizedDescription)")
 //        }
 //    }
-//    
+//
 //    @ViewBuilder
 //    private func lineView(for entry: (character: String, line: String), at index: Int) -> some View {
 //        VStack(alignment: .leading, spacing: 4) {
 //            Text(entry.character)
 //                .font(.headline)
 //                .foregroundColor(.primary)
-//            
+//
 //            if selectedCharacters.contains("Not Applicable") {
 //                Text(entry.line)
 //                    .font(.body)
@@ -529,44 +531,44 @@
 //        .padding(.bottom, 5)
 //        .id(index)
 //    }
-//    
+//
 //    func extractDialogue(from text: String) -> [(character: String, line: String)] {
 //        var extractedDialogue: [(String, String)] = []
 //        let lines = text.split(separator: "\n")
-//        
+//
 //        for line in lines {
 //            let trimmedLine = line.trimmingCharacters(in: .whitespacesAndNewlines)
 //            guard let colonIndex = trimmedLine.firstIndex(of: ":") else {
 //                continue
 //            }
-//            
+//
 //            let characterName = String(trimmedLine[..<colonIndex]).trimmingCharacters(in: .whitespaces)
 //            let content = trimmedLine[trimmedLine.index(after: colonIndex)...].trimmingCharacters(in: .whitespaces)
-//            
+//
 //            extractedDialogue.append((characterName, content))
 //        }
-//        
+//
 //        return extractedDialogue
 //    }
-//    
+//
 //    // MARK: - Speech
 //    func initializeSpeech() {
 //        currentUtteranceIndex = 0
 //        isSpeaking = false
 //        isPaused = false
-//        
+//
 //        synthesizer = AVSpeechSynthesizer()
 //        speechDelegate = nil
-//        
+//
 //        startNextLine()
 //    }
-//    
+//
 //    private func startNextLine() {
 //        guard currentUtteranceIndex < dialogue.count else {
 //            showScriptCompletionAlert = true
 //            return
 //        }
-//        
+//
 //        let entry = dialogue[currentUtteranceIndex]
 //        if selectedCharacters.contains("Not Applicable") {
 //            isUserLine = false
@@ -578,27 +580,27 @@
 //            speakLine(entry.line)
 //        }
 //    }
-//    
+//
 //    private func userLineFinished() {
 //        currentUtteranceIndex += 1
 //        startNextLine()
 //    }
-//    
+//
 //    private func speakLine(_ text: String) {
 //        let utterance = AVSpeechUtterance(string: text)
 //        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
 //        utterance.postUtteranceDelay = 0.5
-//        
+//
 //        let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
 //            currentUtteranceIndex += 1
 //            startNextLine()
 //        }
 //        speechDelegate = delegate
 //        synthesizer.delegate = delegate
-//        
+//
 //        synthesizer.speak(utterance)
 //    }
-//    
+//
 //    func pauseOrResumeSpeech() {
 //        guard synthesizer.isSpeaking else { return }
 //        if isPaused {
@@ -609,14 +611,14 @@
 //            isPaused = true
 //        }
 //    }
-//    
+//
 //    private func restartScript(keepSettings: Bool) {
 //        synthesizer.stopSpeaking(at: .immediate)
 //        synthesizer.delegate = nil
-//        
+//
 //        currentUtteranceIndex = 0
 //        isUserLine = false
-//        
+//
 //        if keepSettings {
 //            initializeSpeech()
 //        } else {
@@ -625,7 +627,7 @@
 //            displayLinesAsRead = true
 //        }
 //    }
-//    
+//
 //    func colorForCharacter(_ character: String) -> Color {
 //        let colors: [Color] = [.orange, .blue, .pink, .purple, .red, .teal]
 //        let sortedSelections = selectedCharacters.sorted()
@@ -639,11 +641,11 @@
 //// MARK: - AVSpeechSynthesizerDelegateWrapper
 //class AVSpeechSynthesizerDelegateWrapper: NSObject, AVSpeechSynthesizerDelegate {
 //    private let completion: () -> Void
-//    
+//
 //    init(completion: @escaping () -> Void) {
 //        self.completion = completion
 //    }
-//    
+//
 //    func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer,
 //                           didFinish utterance: AVSpeechUtterance) {
 //        completion()

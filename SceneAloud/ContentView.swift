@@ -41,44 +41,28 @@ struct ContentView: View {
     @State private var inputType: ScriptInputType = .text  // Default to text file input
     @State private var splashPlayer = AVPlayer()
     @State private var videoFinished = false
+    @Environment(\.colorScheme) private var colorScheme
 
     var body: some View {
         NavigationView {
-            if isShowingSplash {
+        if isShowingSplash {
                 ZStack {
-                    VideoPlayer(player: splashPlayer)
+                    // Full-screen background so taps register everywhere
+                    Color(colorScheme == .dark ? .black : .white)
                         .ignoresSafeArea()
-                        .allowsHitTesting(false)
-                        .onAppear {
-                            if let url = Bundle.main.url(forResource: "Opening animation", withExtension: "mov") {
-                                splashPlayer = AVPlayer(url: url)
-                                splashPlayer.play()
-                                NotificationCenter.default.addObserver(forName: .AVPlayerItemDidPlayToEndTime, object: splashPlayer.currentItem, queue: .main) { _ in
-                                    withAnimation {
-                                        videoFinished = true
-                                    }
-                                }
-                            } else {
-                                DispatchQueue.main.asyncAfter(deadline: .now() + 3) {
-                                    withAnimation {
-                                        videoFinished = true
-                                    }
-                                }
-                            }
-                        }
 
-                    // Overlay content: welcome text at the top and bottom section with "Tap to continue" above credits
+                    // Overlay content: welcome text at the top and bottom section with credits
                     VStack {
                         // Top-aligned welcome text
                         VStack(spacing: 10) {
                             Text("Welcome to")
                                 .font(.system(size: 40, weight: .bold))
-                                .foregroundColor(.white)
+                                .foregroundColor(colorScheme == .dark ? .white : .black)
                                 .multilineTextAlignment(.center)
 
                             Text("SceneAloud!")
                                 .font(.system(size: 40, weight: .bold))
-                                .foregroundColor(.white)
+                                .foregroundColor(colorScheme == .dark ? .white : .black)
                                 .multilineTextAlignment(.center)
                                 .padding(.top, 5)
                         }
@@ -86,31 +70,21 @@ struct ContentView: View {
 
                         Spacer()
 
-                        // Bottom section: "Tap to continue" text (shown only after video finishes) above the credits
-                        if videoFinished {
-                            Text("Tap to continue")
-                                .font(.headline)
-                                .foregroundColor(.white)
-                                .padding(.bottom, 10)
-                        }
-
+                        // Bottom section: credits
                         VStack(spacing: 5) {
                             Text("Created by Lucy Brown")
                             Text("Sound Design and Logo by Abrielle Smith")
                         }
                         .font(.footnote)
-                        .foregroundColor(.white)
+                        .foregroundColor(.gray)
                         .padding(.bottom, 20)
                     }
                     .padding(.horizontal)
                 }
-                // Tap anywhere on the screen to continue after the video has finished.
+                .frame(maxWidth: .infinity, maxHeight: .infinity)     // Fill entire screen
+                .contentShape(Rectangle())                              // Make blank areas tappable
                 .onTapGesture {
-                    if videoFinished {
-                        withAnimation {
-                            isShowingSplash = false
-                        }
-                    }
+                    isShowingSplash = false
                 }
             } else if !hasUploadedFile {
                 // MARK: Upload/Input Page
