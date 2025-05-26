@@ -5,6 +5,7 @@ import PDFKit
 import UniformTypeIdentifiers
 import AVKit
 
+
 // New enum for script input type
 enum ScriptInputType: String, CaseIterable, Identifiable {
     case pdf = "PDF"
@@ -33,6 +34,26 @@ struct ContentView: View {
 
     @State private var showScriptCompletionAlert: Bool = false
     @State private var displayLinesAsRead: Bool = true
+    @State private var displayMyLines: Bool = false
+
+    // Unified alert enum
+    enum AlertType: Identifiable {
+        case noCharacterSelected
+        case displayLinesInfo
+        case notApplicableInfo
+        case displayMyLinesInfo
+
+        var id: Int {
+            switch self {
+            case .noCharacterSelected: return 0
+            case .displayLinesInfo: return 1
+            case .notApplicableInfo: return 2
+            case .displayMyLinesInfo: return 3
+            }
+        }
+    }
+
+    @State private var activeAlert: AlertType? = nil
 
     // MARK: - New State Variables for Script Input
     @State private var isShowingDocumentPicker: Bool = false
@@ -42,6 +63,7 @@ struct ContentView: View {
     @State private var splashPlayer = AVPlayer()
     @State private var videoFinished = false
     @Environment(\.colorScheme) private var colorScheme
+
 
     var body: some View {
         NavigationView {
@@ -92,7 +114,7 @@ struct ContentView: View {
                     Text("Upload Your Script")
                         .font(.largeTitle)
                         .bold()
-                        .padding(.top, 40)
+                        .padding(.top, 20)
 
                     Text("Is your script a PDF, a text file, or will you type it?")
                         .font(.body)
@@ -180,7 +202,7 @@ struct ContentView: View {
                                             .background(Color.green)
                                             .cornerRadius(10)
                                     }
-                            
+
                                     Button(action: {
                                         if let url = URL(string: "https://claude.ai/new") {
                                             UIApplication.shared.open(url)
@@ -193,7 +215,7 @@ struct ContentView: View {
                                             .background(Color.green)
                                             .cornerRadius(10)
                                     }
-                                    
+
                         }
                     } else {
                         // For text file input, show the file selection button.
@@ -226,72 +248,152 @@ struct ContentView: View {
                 .padding()
             } else if !isCharacterSelected {
                 // MARK: Settings Page
-                VStack(alignment: .leading) {
-                    Text("Settings")
-                        .font(.largeTitle)
-                        .bold()
-                        .padding(.top, 20)
+                ZStack(alignment: .topLeading) {
+                    VStack(spacing: 0) {
+                        VStack(alignment: .leading) {
+                            Text("Settings")
+                                .font(.largeTitle)
+                                .bold()
 
-                    Text("Select your characters")
-                        .font(.title2)
-                        .padding(.vertical, 5)
+                            Text("Select your characters")
+                                .font(.title2)
+                                .padding(.vertical, 5)
 
-                    Toggle("Not Applicable", isOn: Binding(
-                        get: { selectedCharacters.contains("Not Applicable") },
-                        set: { newValue in
-                            if newValue {
-                                selectedCharacters = ["Not Applicable"]
-                            } else {
-                                selectedCharacters.remove("Not Applicable")
-                            }
-                        }
-                    ))
-                    .padding(.vertical, 2)
-
-                    ForEach(characters, id: \.self) { character in
-                        Toggle(character.capitalized, isOn: Binding(
-                            get: { selectedCharacters.contains(character) },
-                            set: { newValue in
-                                if newValue {
-                                    selectedCharacters.remove("Not Applicable")
-                                    selectedCharacters.insert(character)
-                                } else {
-                                    selectedCharacters.remove(character)
+                            // Not Applicable row with info button (moved after label)
+                            HStack {
+                                Text("Not Applicable")
+                                Button(action: { activeAlert = .notApplicableInfo }) {
+                                    Image(systemName: "info.circle")
+                                        .foregroundColor(.blue)
                                 }
+                                .buttonStyle(PlainButtonStyle())
+                                Spacer()
+                                Toggle("", isOn: Binding(
+                                    get: { selectedCharacters.contains("Not Applicable") },
+                                    set: { newValue in
+                                        if newValue {
+                                            selectedCharacters = ["Not Applicable"]
+                                        } else {
+                                            selectedCharacters.remove("Not Applicable")
+                                        }
+                                    }
+                                ))
+                                .labelsHidden()
                             }
-                        ))
-                        .padding(.vertical, 2)
+                            .padding(.vertical, 2)
+
+                            ForEach(characters, id: \.self) { character in
+                                Toggle(character.capitalized, isOn: Binding(
+                                    get: { selectedCharacters.contains(character) },
+                                    set: { newValue in
+                                        if newValue {
+                                            selectedCharacters.remove("Not Applicable")
+                                            selectedCharacters.insert(character)
+                                        } else {
+                                            selectedCharacters.remove(character)
+                                        }
+                                    }
+                                ))
+                                .padding(.vertical, 2)
+                            }
+
+                            VStack(alignment: .leading, spacing: 10) {
+                                HStack {
+                                    Text("Display lines as read")
+                                        .font(.title2)
+                                    Button(action: {
+                                        activeAlert = .displayLinesInfo
+                                    }) {
+                                        Image(systemName: "info.circle")
+                                            .foregroundColor(.blue)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                                Toggle("", isOn: $displayLinesAsRead)
+                                    .labelsHidden()
+                            }
+                            .padding(.top, 20)
+
+                            // "Display my lines" row with info button and toggle, disable if Not Applicable is selected
+                            VStack(alignment: .leading, spacing: 0) {
+                                HStack {
+                                    Text("Display my lines")
+                                        .font(.title2)
+                                    Button(action: {
+                                        activeAlert = .displayMyLinesInfo
+                                    }) {
+                                        Image(systemName: "info.circle")
+                                            .foregroundColor(.blue)
+                                    }
+                                    .buttonStyle(PlainButtonStyle())
+                                }
+                                Toggle("", isOn: $displayMyLines)
+                                    .labelsHidden()
+                                    .disabled(selectedCharacters.contains("Not Applicable"))
+                            }
+                            .padding(.vertical, 2)
+
+                            Spacer()
+
+                            Button(action: {
+                                if selectedCharacters.isEmpty {
+                                    activeAlert = .noCharacterSelected
+                                } else {
+                                    isCharacterSelected = true
+                                    print("✅ Characters Selected: \(selectedCharacters)")
+                                }
+                            }) {
+                                Text("Done")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.blue)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                            }
+                            .padding(.bottom, 20)
+                        }
+                        .padding(.horizontal, 20)
+                        .padding(.top, -8)
                     }
-
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Display lines as read")
-                            .font(.title2)
-
-                        Toggle("", isOn: $displayLinesAsRead)
-                            .labelsHidden()
-                    }
-                    .padding(.top, 20)
-
-                    Spacer()
-
-                    Button(action: {
-                        isCharacterSelected = true
-                        print("✅ Characters Selected: \(selectedCharacters)")
-                    }) {
-                        Text("Done")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
-                    .padding(.bottom, 20)
                 }
-                .padding(.horizontal, 20)
+                .alert(item: $activeAlert) { alert in
+                    switch alert {
+                    case .noCharacterSelected:
+                        return Alert(
+                            title: Text("No Character Selected"),
+                            message: Text("Please select at least one character to continue."),
+                            dismissButton: .default(Text("OK")) {
+                                activeAlert = nil
+                            }
+                        )
+                    case .displayLinesInfo:
+                        return Alert(
+                            title: Text("Display Lines Info"),
+                            message: Text("The display lines as read option shows all of the script when turned off. When turned on lines will only appear as they are read, making it easier to follow."),
+                            dismissButton: .default(Text("OK")) {
+                                activeAlert = nil
+                            }
+                        )
+                    case .notApplicableInfo:
+                        return Alert(
+                            title: Text("Not Applicable"),
+                            message: Text("When 'Not Applicable' is selected, you will just be listening to the script and will not be participating."),
+                            dismissButton: .default(Text("OK")) {
+                                activeAlert = nil
+                            }
+                        )
+                    case .displayMyLinesInfo:
+                        return Alert(
+                            title: Text("Display My Lines"),
+                            message: Text("When selected, Display My Lines will display the lines of the character the user has selected to play. When it is not selected, the user will be prompted when it is their line, but they will not be shown it."),
+                            dismissButton: .default(Text("OK")) {
+                                activeAlert = nil
+                            }
+                        )
+                    }
+                }
                 .frame(maxHeight: .infinity, alignment: .top)
-                .navigationTitle("Settings")
-                .navigationBarTitleDisplayMode(.inline)
                 .toolbar {
                     ToolbarItem(placement: .navigationBarLeading) {
                         Button(action: {
@@ -303,6 +405,16 @@ struct ContentView: View {
                                 Text("Back to Upload")
                             }
                         }
+                    }
+                    ToolbarItem(placement: .principal) {
+                        Text("Settings")
+                            .foregroundColor(colorScheme == .dark ? .black : .white)
+                    }
+                }
+                // Automatically set displayMyLines = false if Not Applicable is selected
+                .onChange(of: selectedCharacters) { _, newValue in
+                    if newValue.contains("Not Applicable") {
+                        displayMyLines = false
                     }
                 }
             } else {
@@ -380,6 +492,7 @@ struct ContentView: View {
                 .onAppear(perform: initializeSpeech)
             }
         }
+        .navigationBarHidden(isShowingSplash)
         .alert(isPresented: $showScriptCompletionAlert) {
             Alert(
                 title: Text("You’ve reached the end!"),
@@ -510,14 +623,26 @@ struct ContentView: View {
                     )
                     .cornerRadius(5)
             } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
-                Text("It’s your line! Press to continue.")
-                    .font(.body)
-                    .padding(5)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(
-                        index == currentUtteranceIndex ? colorForCharacter(entry.character).opacity(0.7) : Color.clear
-                    )
-                    .cornerRadius(5)
+                if displayMyLines {
+                    // Show user's line, never spoken
+                    Text(entry.line)
+                        .font(.body)
+                        .padding(5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            index == currentUtteranceIndex ? colorForCharacter(entry.character).opacity(0.7) : Color.clear
+                        )
+                        .cornerRadius(5)
+                } else {
+                    Text("It’s your line! Press to continue.")
+                        .font(.body)
+                        .padding(5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(
+                            index == currentUtteranceIndex ? colorForCharacter(entry.character).opacity(0.7) : Color.clear
+                        )
+                        .cornerRadius(5)
+                }
             } else {
                 Text(entry.line)
                     .font(.body)
@@ -574,7 +699,14 @@ struct ContentView: View {
             isUserLine = false
             speakLine(entry.line)
         } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
-            isUserLine = true
+            if displayMyLines {
+                // Show user's line, never spoken
+                isUserLine = true
+                // Do NOT speak the line
+            } else {
+                // Prompt user, do not show line, do not speak
+                isUserLine = true
+            }
         } else {
             isUserLine = false
             speakLine(entry.line)
@@ -651,3 +783,4 @@ class AVSpeechSynthesizerDelegateWrapper: NSObject, AVSpeechSynthesizerDelegate 
         completion()
     }
 }
+

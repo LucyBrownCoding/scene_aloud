@@ -5,6 +5,7 @@
 //import UniformTypeIdentifiers
 //import AVKit
 //
+//
 //// New enum for script input type
 //enum ScriptInputType: String, CaseIterable, Identifiable {
 //    case pdf = "PDF"
@@ -33,6 +34,9 @@
 //
 //    @State private var showScriptCompletionAlert: Bool = false
 //    @State private var displayLinesAsRead: Bool = true
+//    @State private var displayMyLines: Bool = false
+//    @State private var showCharacterSelectionAlert: Bool = false
+//    @State private var showDisplayLinesInfoAlert: Bool = false
 //
 //    // MARK: - New State Variables for Script Input
 //    @State private var isShowingDocumentPicker: Bool = false
@@ -42,6 +46,7 @@
 //    @State private var splashPlayer = AVPlayer()
 //    @State private var videoFinished = false
 //    @Environment(\.colorScheme) private var colorScheme
+//    
 //
 //    var body: some View {
 //        NavigationView {
@@ -92,7 +97,7 @@
 //                    Text("Upload Your Script")
 //                        .font(.largeTitle)
 //                        .bold()
-//                        .padding(.top, 40)
+//                        .padding(.top, 20)
 //
 //                    Text("Is your script a PDF, a text file, or will you type it?")
 //                        .font(.body)
@@ -264,19 +269,39 @@
 //                    }
 //
 //                    VStack(alignment: .leading, spacing: 10) {
-//                        Text("Display lines as read")
-//                            .font(.title2)
-//
+//                        HStack {
+//                            Text("Display lines as read")
+//                                .font(.title2)
+//                            Button(action: {
+//                                showDisplayLinesInfoAlert = true
+//                            }) {
+//                                Image(systemName: "info.circle")
+//                            }
+//                        }
 //                        Toggle("", isOn: $displayLinesAsRead)
 //                            .labelsHidden()
 //                    }
 //                    .padding(.top, 20)
 //
+//                    if !selectedCharacters.contains("Not Applicable") && !selectedCharacters.isEmpty {
+//                        VStack(alignment: .leading, spacing: 10) {
+//                            Text("Display My Lines")
+//                                .font(.title2)
+//                            Toggle("", isOn: $displayMyLines)
+//                                .labelsHidden()
+//                        }
+//                        .padding(.vertical, 2)
+//                    }
+//
 //                    Spacer()
 //
 //                    Button(action: {
-//                        isCharacterSelected = true
-//                        print("✅ Characters Selected: \(selectedCharacters)")
+//                        if selectedCharacters.isEmpty {
+//                            showCharacterSelectionAlert = true
+//                        } else {
+//                            isCharacterSelected = true
+//                            print("✅ Characters Selected: \(selectedCharacters)")
+//                        }
 //                    }) {
 //                        Text("Done")
 //                            .font(.headline)
@@ -289,6 +314,20 @@
 //                    .padding(.bottom, 20)
 //                }
 //                .padding(.horizontal, 20)
+//                .alert(isPresented: $showCharacterSelectionAlert) {
+//                    Alert(
+//                        title: Text("No Character Selected"),
+//                        message: Text("Please select at least one character to continue."),
+//                        dismissButton: .default(Text("OK"))
+//                    )
+//                }
+//                .alert(isPresented: $showDisplayLinesInfoAlert) {
+//                    Alert(
+//                        title: Text("Display Lines Info"),
+//                        message: Text("The display lines as read option shows all of the script when turned off. When turned on lines will only appear as they are read, making it easier to follow."),
+//                        dismissButton: .default(Text("OK"))
+//                    )
+//                }
 //                .frame(maxHeight: .infinity, alignment: .top)
 //                .navigationTitle("Settings")
 //                .navigationBarTitleDisplayMode(.inline)
@@ -380,6 +419,7 @@
 //                .onAppear(perform: initializeSpeech)
 //            }
 //        }
+//        .navigationBarHidden(isShowingSplash)
 //        .alert(isPresented: $showScriptCompletionAlert) {
 //            Alert(
 //                title: Text("You’ve reached the end!"),
@@ -510,7 +550,7 @@
 //                    )
 //                    .cornerRadius(5)
 //            } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
-//                Text("It’s your line! Press to continue.")
+//                Text(displayMyLines ? entry.line : "It’s your line! Press to continue.")
 //                    .font(.body)
 //                    .padding(5)
 //                    .frame(maxWidth: .infinity, alignment: .leading)
@@ -651,3 +691,4 @@
 //        completion()
 //    }
 //}
+//
