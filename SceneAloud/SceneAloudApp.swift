@@ -9,9 +9,12 @@ import SwiftUI
 
 @main
 struct SceneAloudApp: App {
+    @StateObject private var library = LibraryManager()
+    
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(library)
         }
     }
 }

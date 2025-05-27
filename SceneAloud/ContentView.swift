@@ -54,8 +54,6 @@ struct ContentView: View {
     }
 
     @State private var activeAlert: AlertType? = nil
-
-    // MARK: - New State Variables for Script Input
     @State private var isShowingDocumentPicker: Bool = false
     @State private var selectedFileURL: URL? = nil
     @State private var hasUploadedFile: Bool = false
@@ -65,502 +63,525 @@ struct ContentView: View {
     @State private var splashPlayer = AVPlayer()
     @State private var videoFinished = false
     @Environment(\.colorScheme) private var colorScheme
+    // Library support
+    @EnvironmentObject var library: LibraryManager
+    @State private var currentSavedScriptID: UUID? = nil
+    @State private var showSideMenu: Bool = false
 
 
     var body: some View {
-        NavigationView {
-        if isShowingSplash {
-                ZStack {
-                    // Full-screen background so taps register everywhere
-                    Color(colorScheme == .dark ? .black : .white)
-                        .ignoresSafeArea()
-
-                    // Overlay content: welcome text at the top and bottom section with credits
-                    VStack {
-                        // Top-aligned welcome text
-                        VStack(spacing: 10) {
-                            Text("Welcome to")
-                                .font(.system(size: 40, weight: .bold))
-                                .foregroundColor(colorScheme == .dark ? .white : .black)
-                                .multilineTextAlignment(.center)
-
-                            Text("SceneAloud!")
-                                .font(.system(size: 40, weight: .bold))
-                                .foregroundColor(colorScheme == .dark ? .white : .black)
-                                .multilineTextAlignment(.center)
-                                .padding(.top, 5)
+HamburgerOverlay(showSideMenu: $showSideMenu) {
+            NavigationView {
+                if isShowingSplash {
+                    ZStack {
+                        // Full-screen background so taps register everywhere
+                        Color(colorScheme == .dark ? .black : .white)
+                            .ignoresSafeArea()
+                        
+                        // Overlay content: welcome text at the top and bottom section with credits
+                        VStack {
+                            // Top-aligned welcome text
+                            VStack(spacing: 10) {
+                                Text("Welcome to")
+                                    .font(.system(size: 40, weight: .bold))
+                                    .foregroundColor(colorScheme == .dark ? .white : .black)
+                                    .multilineTextAlignment(.center)
+                                
+                                Text("SceneAloud!")
+                                    .font(.system(size: 40, weight: .bold))
+                                    .foregroundColor(colorScheme == .dark ? .white : .black)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.top, 5)
+                            }
+                            .padding(.top, 40)
+                            
+                            Spacer()
+                            
+                            // Bottom section: credits
+                            VStack(spacing: 5) {
+                                Text("Created by Lucy Brown")
+                                Text("Sound Design and Logo by Abrielle Smith")
+                            }
+                            .font(.footnote)
+                            .foregroundColor(.gray)
+                            .padding(.bottom, 20)
                         }
-                        .padding(.top, 40)
-
-                        Spacer()
-
-                        // Bottom section: credits
-                        VStack(spacing: 5) {
-                            Text("Created by Lucy Brown")
-                            Text("Sound Design and Logo by Abrielle Smith")
-                        }
-                        .font(.footnote)
-                        .foregroundColor(.gray)
-                        .padding(.bottom, 20)
+                        .padding(.horizontal)
                     }
-                    .padding(.horizontal)
-                }
-                .frame(maxWidth: .infinity, maxHeight: .infinity)     // Fill entire screen
-                .contentShape(Rectangle())                              // Make blank areas tappable
-                .onTapGesture {
-                    isShowingSplash = false
-                }
-            } else if !hasUploadedFile {
-                // MARK: Upload/Input Page
-                VStack(spacing: 20) {
-                    Text("Upload Your Script")
-                        .font(.largeTitle)
-                        .bold()
-                        .padding(.top, 20)
-
-                    Text("Is your script a PDF, a text file, or will you type it?")
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
-
-                    // Picker to select the input type
-                    Picker("Script Input Type", selection: $inputType) {
-                        ForEach(ScriptInputType.allCases) { type in
-                            Text(type.rawValue).tag(type)
-                        }
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)     // Fill entire screen
+                    .contentShape(Rectangle())                              // Make blank areas tappable
+                    .onTapGesture {
+                        isShowingSplash = false
                     }
-                    .pickerStyle(SegmentedPickerStyle())
-                    .padding(.horizontal, 40)
-
-                    // Show appropriate view based on inputType
-                    if inputType == .typed {
-                        // For typed input, show a TextEditor.
-                        TextEditor(text: $fileContent)
-                            .frame(height: 200)
-                            .border(Color.gray, width: 1)
+                } else if !hasUploadedFile {
+                    // MARK: Upload/Input Page
+                    VStack(spacing: 20) {
+                        Text("Upload Your Script")
+                            .font(.largeTitle)
+                            .bold()
+                            .padding(.top, 20)
+                        
+                        Text("Is your script a PDF, a text file, or will you type it?")
+                            .font(.body)
+                            .multilineTextAlignment(.center)
                             .padding(.horizontal, 40)
-
-                        Button(action: {
-                            // First, convert the script text to the correct format.
-                            let convertedScript = convertScriptToCorrectFormat(from: fileContent)
-                            // Then extract the dialogue.
-                            self.dialogue = self.extractDialogue(from: convertedScript)
-                            let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
-                            self.characters = extractedCharacters
-                            self.uploadedFileName = "Typed Script"
-                            self.hasPressedContinue = false
-                            self.hasUploadedFile = true
-                        }) {
-                            Text("Submit Script")
-                                .font(.headline)
+                        
+                        // Picker to select the input type
+                        Picker("Script Input Type", selection: $inputType) {
+                            ForEach(ScriptInputType.allCases) { type in
+                                Text(type.rawValue).tag(type)
+                            }
+                        }
+                        .pickerStyle(SegmentedPickerStyle())
+                        .padding(.horizontal, 40)
+                        
+                        // Show appropriate view based on inputType
+                        if inputType == .typed {
+                            // For typed input, show a TextEditor.
+                            TextEditor(text: $fileContent)
+                                .frame(height: 200)
+                                .border(Color.gray, width: 1)
+                                .padding(.horizontal, 40)
+                            
+                            Button(action: {
+                                // First, convert the script text to the correct format.
+                                let convertedScript = convertScriptToCorrectFormat(from: fileContent)
+                                // Then extract the dialogue.
+                                self.dialogue = self.extractDialogue(from: convertedScript)
+                                let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
+                                self.characters = extractedCharacters
+                                self.uploadedFileName = "Typed Script"
+                                self.hasPressedContinue = false
+                                self.hasUploadedFile = true
+                            }) {
+                                Text("Submit Script")
+                                    .font(.headline)
+                                    .padding()
+                                    .foregroundColor(.white)
+                                    .background(Color.blue)
+                                    .cornerRadius(10)
+                            }
+                            .padding(.top, 10)
+                        } else if inputType == .pdf {
+                            // For PDF input, show a message with a ChatGPT prompt instead of allowing PDF uploads.
+                            VStack(spacing: 20) {
+                                Text("Hello! To keep this app free, PDF conversion isn’t supported. Instead, copy the prompt below into ChatGPT or Claude AI(or any similar AI tool) and attach your script PDF to convert your PDF to a text file for free.")
+                                    .font(.body)
+                                    .multilineTextAlignment(.center)
+                                    .padding(.horizontal, 40)
+                                
+                                Button(action: {
+                                    UIPasteboard.general.string = """
+                                            I have a PDF file attached that contains the script for a play.  The script contains scene descriptions, parenthetical notations, and most importantly, the lines each character should read.  Scene descriptions will often be written in italics.
+                                            
+                                            Your job is to extract the character lines, and nothing else.   It is important for you to extract all of the lines until you reach the end of the play.  The end of the play will often be indicated by "END OF PLAY" or something similar.
+                                            
+                                            Please return the lines in the following format:
+                                            
+                                            "Character name: Line"
+                                            
+                                            If the text in the PDF isn’t extractable using standard methods, please use OCR to extract the text from the pages.
+                                            If the process takes too long and is interrupted, to make this more manageable, extract the character lines one page at a time.
+                                            
+                                            You do not need to ask me if it is ok to use more sophisticated OCR techniques, and you don’t need to ask me each time you finish a page.
+                                            I want you to extract all of the lines until you reach the end of the play.  If you need to do this page by page, do so without asking me if it’s ok.
+                                            
+                                            Once you have finished all the pages, please consolidate all of the prior lines from all pages into a single file, and allow me to download the file.  Make sure the lines are in the original order.
+                                            """
+                                }) {
+                                    Text("Copy Prompt")
+                                        .font(.headline)
+                                        .padding()
+                                        .foregroundColor(.white)
+                                        .background(Color.blue)
+                                        .cornerRadius(10)
+                                }
+                                
+                                Button(action: {
+                                    if let url = URL(string: "https://chat.openai.com/") {
+                                        UIApplication.shared.open(url)
+                                    }
+                                }) {
+                                    Text("Go to ChatGPT")
+                                        .font(.headline)
+                                        .padding()
+                                        .foregroundColor(.white)
+                                        .background(Color.green)
+                                        .cornerRadius(10)
+                                }
+                                
+                                Button(action: {
+                                    if let url = URL(string: "https://claude.ai/new") {
+                                        UIApplication.shared.open(url)
+                                    }
+                                }) {
+                                    Text("Go to Claude AI")
+                                        .font(.headline)
+                                        .padding()
+                                        .foregroundColor(.white)
+                                        .background(Color.green)
+                                        .cornerRadius(10)
+                                }
+                                
+                            }
+                        } else {
+                            // For text file input, show the file selection button.
+                            Button(action: {
+                                isShowingDocumentPicker = true
+                            }) {
+                                HStack {
+                                    Image(systemName: "doc.text.fill")
+                                        .font(.title)
+                                    Text("Select Text File")
+                                        .font(.headline)
+                                }
                                 .padding()
                                 .foregroundColor(.white)
                                 .background(Color.blue)
                                 .cornerRadius(10)
-                        }
-                        .padding(.top, 10)
-                    } else if inputType == .pdf {
-                        // For PDF input, show a message with a ChatGPT prompt instead of allowing PDF uploads.
-                        VStack(spacing: 20) {
-                            Text("Hello! To keep this app free, PDF conversion isn’t supported. Instead, copy the prompt below into ChatGPT or Claude AI(or any similar AI tool) and attach your script PDF to convert your PDF to a text file for free.")
-                                .font(.body)
-                                .multilineTextAlignment(.center)
-                                .padding(.horizontal, 40)
-
-                            Button(action: {
-                                        UIPasteboard.general.string = """
-                                        I have a PDF file attached that contains the script for a play.  The script contains scene descriptions, parenthetical notations, and most importantly, the lines each character should read.  Scene descriptions will often be written in italics.
-
-                                        Your job is to extract the character lines, and nothing else.   It is important for you to extract all of the lines until you reach the end of the play.  The end of the play will often be indicated by "END OF PLAY" or something similar.
-
-                                        Please return the lines in the following format:
-
-                                        "Character name: Line"
-
-                                        If the text in the PDF isn’t extractable using standard methods, please use OCR to extract the text from the pages.
-                                        If the process takes too long and is interrupted, to make this more manageable, extract the character lines one page at a time.
-
-                                        You do not need to ask me if it is ok to use more sophisticated OCR techniques, and you don’t need to ask me each time you finish a page.
-                                        I want you to extract all of the lines until you reach the end of the play.  If you need to do this page by page, do so without asking me if it’s ok.
-
-                                        Once you have finished all the pages, please consolidate all of the prior lines from all pages into a single file, and allow me to download the file.  Make sure the lines are in the original order.
-                                        """
-                                    }) {
-                                        Text("Copy Prompt")
-                                            .font(.headline)
-                                            .padding()
-                                            .foregroundColor(.white)
-                                            .background(Color.blue)
-                                            .cornerRadius(10)
-                                    }
-
-                                    Button(action: {
-                                        if let url = URL(string: "https://chat.openai.com/") {
-                                            UIApplication.shared.open(url)
-                                        }
-                                    }) {
-                                        Text("Go to ChatGPT")
-                                            .font(.headline)
-                                            .padding()
-                                            .foregroundColor(.white)
-                                            .background(Color.green)
-                                            .cornerRadius(10)
-                                    }
-
-                                    Button(action: {
-                                        if let url = URL(string: "https://claude.ai/new") {
-                                            UIApplication.shared.open(url)
-                                        }
-                                    }) {
-                                        Text("Go to Claude AI")
-                                            .font(.headline)
-                                            .padding()
-                                            .foregroundColor(.white)
-                                            .background(Color.green)
-                                            .cornerRadius(10)
-                                    }
-
-                        }
-                    } else {
-                        // For text file input, show the file selection button.
-                        Button(action: {
-                            isShowingDocumentPicker = true
-                        }) {
-                            HStack {
-                                Image(systemName: "doc.text.fill")
-                                    .font(.title)
-                                Text("Select Text File")
-                                    .font(.headline)
                             }
-                            .padding()
-                            .foregroundColor(.white)
-                            .background(Color.blue)
-                            .cornerRadius(10)
-                        }
-                        .sheet(isPresented: $isShowingDocumentPicker) {
-                            DocumentPicker(filePath: $selectedFileURL, allowedContentTypes: [UTType.plainText])
-                        }
-                        .onChange(of: selectedFileURL) { _, newValue in
-                            if let url = newValue {
-                                handleFileSelection(url: url)
+                            .sheet(isPresented: $isShowingDocumentPicker) {
+                                DocumentPicker(filePath: $selectedFileURL, allowedContentTypes: [UTType.plainText])
                             }
-                        }
-                    }
-
-                    Spacer()
-                }
-                .padding()
-            } else if !hasPressedContinue {       // NEW Continue page
-                VStack(spacing: 20) {
-                    Text("Script Uploaded!")
-                        .font(.largeTitle)
-                        .bold()
-                        .padding(.top, 20)
-
-                    Text("Press Continue to select your settings.")
-                        .font(.body)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 40)
-                    
-                    HStack {
-                        Text(uploadedFileName)
-                            .font(.title2)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-
-                        Spacer()
-
-                        Button(action: {
-                            // Remove the uploaded script and return to the original upload screen
-                            uploadedFileName = ""
-                            fileContent = ""
-                            selectedFileURL = nil
-                            dialogue = []
-                            characters = []
-                            selectedCharacters = []
-                            hasUploadedFile = false
-                            hasPressedContinue = false
-                        }) {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.title2)
-                                .foregroundColor(.red)
-                        }
-                        .accessibilityLabel("Remove uploaded script")
-                    }
-                    .padding(.horizontal, 40)
-                    .padding(.top, 10)
-
-                    Button(action: { hasPressedContinue = true }) {
-                        Text("Continue")
-                            .font(.headline)
-                            .frame(maxWidth: .infinity)
-                            .padding()
-                            .background(Color.blue)
-                            .foregroundColor(.white)
-                            .cornerRadius(10)
-                    }
-                    .padding(.horizontal, 40)
-
-                    Spacer()
-                }
-                .padding()
-            } else if !isCharacterSelected {
-                // MARK: Settings Page
-                ZStack(alignment: .topLeading) {
-                    VStack(spacing: 0) {
-                        VStack(alignment: .leading) {
-                            Text("Settings")
-                                .font(.largeTitle)
-                                .bold()
-
-                            Text("Select your characters")
-                                .font(.title2)
-                                .padding(.vertical, 5)
-
-                            // Not Applicable row with info button (moved after label)
-                            HStack {
-                                Text("Not Applicable")
-                                Button(action: { activeAlert = .notApplicableInfo }) {
-                                    Image(systemName: "info.circle")
-                                        .foregroundColor(.blue)
+                            .onChange(of: selectedFileURL) { _, newValue in
+                                if let url = newValue {
+                                    handleFileSelection(url: url)
                                 }
-                                .buttonStyle(PlainButtonStyle())
-                                Spacer()
-                                Toggle("", isOn: Binding(
-                                    get: { selectedCharacters.contains("Not Applicable") },
-                                    set: { newValue in
-                                        if newValue {
-                                            selectedCharacters = ["Not Applicable"]
-                                        } else {
-                                            selectedCharacters.remove("Not Applicable")
-                                        }
-                                    }
-                                ))
-                                .labelsHidden()
                             }
-                            .padding(.vertical, 2)
-
-                            ForEach(characters, id: \.self) { character in
-                                Toggle(character.capitalized, isOn: Binding(
-                                    get: { selectedCharacters.contains(character) },
-                                    set: { newValue in
-                                        if newValue {
-                                            selectedCharacters.remove("Not Applicable")
-                                            selectedCharacters.insert(character)
-                                        } else {
-                                            selectedCharacters.remove(character)
-                                        }
-                                    }
-                                ))
-                                .padding(.vertical, 2)
+                        }
+                        
+                        Spacer()
+                    }
+                    .padding()
+                } else if !hasPressedContinue {       // NEW Continue page
+                    VStack(spacing: 20) {
+                        Text("Script Uploaded!")
+                            .font(.largeTitle)
+                            .bold()
+                            .padding(.top, 20)
+                        
+                        Text("Press Continue to select your settings.")
+                            .font(.body)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 40)
+                        
+                        HStack {
+                            Text(uploadedFileName)
+                                .font(.title2)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            
+                            Spacer()
+                            
+                            Button(action: {
+                                // Remove the uploaded script and return to the original upload screen
+                                uploadedFileName = ""
+                                fileContent = ""
+                                selectedFileURL = nil
+                                dialogue = []
+                                characters = []
+                                selectedCharacters = []
+                                hasUploadedFile = false
+                                hasPressedContinue = false
+                                currentSavedScriptID = nil
+                            }) {
+                                Image(systemName: "xmark.circle.fill")
+                                    .font(.title2)
+                                    .foregroundColor(.red)
                             }
-
-                            VStack(alignment: .leading, spacing: 10) {
+                            .accessibilityLabel("Remove uploaded script")
+                        }
+                        .padding(.horizontal, 40)
+                        .padding(.top, 10)
+                        
+                        Button(action: { hasPressedContinue = true }) {
+                            Text("Continue")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                        }
+                        .padding(.horizontal, 40)
+                        
+                        Spacer()
+                    }
+                    .padding()
+                } else if !isCharacterSelected {
+                    // MARK: Settings Page
+                    ZStack(alignment: .topLeading) {
+                        VStack(spacing: 0) {
+                            VStack(alignment: .leading) {
+                                Text("Settings")
+                                    .font(.largeTitle)
+                                    .bold()
+                                
+                                Text("Select your characters")
+                                    .font(.title2)
+                                    .padding(.vertical, 5)
+                                
+                                // Not Applicable row with info button (moved after label)
                                 HStack {
-                                    Text("Display lines as read")
-                                        .font(.title2)
-                                    Button(action: {
-                                        activeAlert = .displayLinesInfo
-                                    }) {
+                                    Text("Not Applicable")
+                                    Button(action: { activeAlert = .notApplicableInfo }) {
                                         Image(systemName: "info.circle")
                                             .foregroundColor(.blue)
                                     }
                                     .buttonStyle(PlainButtonStyle())
-                                }
-                                Toggle("", isOn: $displayLinesAsRead)
+                                    Spacer()
+                                    Toggle("", isOn: Binding(
+                                        get: { selectedCharacters.contains("Not Applicable") },
+                                        set: { newValue in
+                                            if newValue {
+                                                selectedCharacters = ["Not Applicable"]
+                                            } else {
+                                                selectedCharacters.remove("Not Applicable")
+                                            }
+                                        }
+                                    ))
                                     .labelsHidden()
-                            }
-                            .padding(.top, 20)
-
-                            // "Display my lines" row with info button and toggle, disable if Not Applicable is selected
-                            HStack {
-                                Text("Display my lines")
-                                    .font(.title2)
-                                Button(action: {
-                                    activeAlert = .displayMyLinesInfo
-                                }) {
-                                    Image(systemName: "info.circle")
-                                        .foregroundColor(.blue)
                                 }
-                                .buttonStyle(PlainButtonStyle())
+                                .padding(.vertical, 2)
+                                
+                                ForEach(characters, id: \.self) { character in
+                                    Toggle(character.capitalized, isOn: Binding(
+                                        get: { selectedCharacters.contains(character) },
+                                        set: { newValue in
+                                            if newValue {
+                                                selectedCharacters.remove("Not Applicable")
+                                                selectedCharacters.insert(character)
+                                            } else {
+                                                selectedCharacters.remove(character)
+                                            }
+                                        }
+                                    ))
+                                    .padding(.vertical, 2)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 10) {
+                                    HStack {
+                                        Text("Display lines as read")
+                                            .font(.title2)
+                                        Button(action: {
+                                            activeAlert = .displayLinesInfo
+                                        }) {
+                                            Image(systemName: "info.circle")
+                                                .foregroundColor(.blue)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                    Toggle("", isOn: $displayLinesAsRead)
+                                        .labelsHidden()
+                                }
+                                .padding(.top, 20)
+                                
+                                VStack(alignment: .leading, spacing: 10) {
+                                    HStack {
+                                        Text("Display my lines")
+                                            .font(.title2)
+                                        Button(action: {
+                                            activeAlert = .displayMyLinesInfo
+                                        }) {
+                                            Image(systemName: "info.circle")
+                                                .foregroundColor(.blue)
+                                        }
+                                        .buttonStyle(PlainButtonStyle())
+                                    }
+                                    Toggle("", isOn: $displayMyLines)
+                                        .labelsHidden()
+                                        .disabled(selectedCharacters.contains("Not Applicable"))
+                                }
+                                .padding(.vertical, 2)
+                                
                                 Spacer()
-                                Toggle("", isOn: $displayMyLines)
-                                    .labelsHidden()
-                                    .disabled(selectedCharacters.contains("Not Applicable"))
-                            }
-                            .padding(.vertical, 2)
-
-                            Spacer()
-
-                            Button(action: {
-                                if selectedCharacters.isEmpty {
-                                    activeAlert = .noCharacterSelected
-                                } else {
-                                    isCharacterSelected = true
-                                    print("✅ Characters Selected: \(selectedCharacters)")
+                                
+                                Button(action: {
+                                    if selectedCharacters.isEmpty {
+                                        activeAlert = .noCharacterSelected
+                                    } else {
+                                        isCharacterSelected = true
+                                        saveOrUpdateLibraryEntry()
+                                        print("✅ Characters Selected: \(selectedCharacters)")
+                                    }
+                                }) {
+                                    Text("Done")
+                                        .font(.headline)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(Color.blue)
+                                        .foregroundColor(.white)
+                                        .cornerRadius(10)
                                 }
+                                .padding(.bottom, 20)
+                            }
+                            .padding(.horizontal, 20)
+                            .padding(.top, -8)
+                        }
+                    }
+                    .alert(item: $activeAlert) { alert in
+                        switch alert {
+                        case .noCharacterSelected:
+                            return Alert(
+                                title: Text("No Character Selected"),
+                                message: Text("Please select at least one character to continue."),
+                                dismissButton: .default(Text("OK")) {
+                                    activeAlert = nil
+                                }
+                            )
+                        case .displayLinesInfo:
+                            return Alert(
+                                title: Text("Display Lines Info"),
+                                message: Text("The display lines as read option shows all of the script when turned off. When turned on lines will only appear as they are read, making it easier to follow."),
+                                dismissButton: .default(Text("OK")) {
+                                    activeAlert = nil
+                                }
+                            )
+                        case .notApplicableInfo:
+                            return Alert(
+                                title: Text("Not Applicable"),
+                                message: Text("When 'Not Applicable' is selected, you will just be listening to the script and will not be participating."),
+                                dismissButton: .default(Text("OK")) {
+                                    activeAlert = nil
+                                }
+                            )
+                        case .displayMyLinesInfo:
+                            return Alert(
+                                title: Text("Display My Lines"),
+                                message: Text("When selected, Display My Lines will display the lines of the character the user has selected to play. When it is not selected, the user will be prompted when it is their line, but they will not be shown it."),
+                                dismissButton: .default(Text("OK")) {
+                                    activeAlert = nil
+                                }
+                            )
+                        }
+                    }
+                    .frame(maxHeight: .infinity, alignment: .top)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button(action: {
+                                // Jump back to the Continue screen but keep the uploaded script info
+                                hasPressedContinue = false
                             }) {
-                                Text("Done")
-                                    .font(.headline)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.blue)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(10)
-                            }
-                            .padding(.bottom, 20)
-                        }
-                        .padding(.horizontal, 20)
-                        .padding(.top, -8)
-                    }
-                }
-                .alert(item: $activeAlert) { alert in
-                    switch alert {
-                    case .noCharacterSelected:
-                        return Alert(
-                            title: Text("No Character Selected"),
-                            message: Text("Please select at least one character to continue."),
-                            dismissButton: .default(Text("OK")) {
-                                activeAlert = nil
-                            }
-                        )
-                    case .displayLinesInfo:
-                        return Alert(
-                            title: Text("Display Lines Info"),
-                            message: Text("The display lines as read option shows all of the script when turned off. When turned on lines will only appear as they are read, making it easier to follow."),
-                            dismissButton: .default(Text("OK")) {
-                                activeAlert = nil
-                            }
-                        )
-                    case .notApplicableInfo:
-                        return Alert(
-                            title: Text("Not Applicable"),
-                            message: Text("When 'Not Applicable' is selected, you will just be listening to the script and will not be participating."),
-                            dismissButton: .default(Text("OK")) {
-                                activeAlert = nil
-                            }
-                        )
-                    case .displayMyLinesInfo:
-                        return Alert(
-                            title: Text("Display My Lines"),
-                            message: Text("When selected, Display My Lines will display the lines of the character the user has selected to play. When it is not selected, the user will be prompted when it is their line, but they will not be shown it."),
-                            dismissButton: .default(Text("OK")) {
-                                activeAlert = nil
-                            }
-                        )
-                    }
-                }
-                .frame(maxHeight: .infinity, alignment: .top)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button(action: {
-                            // Jump back to the Continue screen but keep the uploaded script info
-                            hasPressedContinue = false
-                        }) {
-                            HStack {
-                                Image(systemName: "arrow.left")
-                                Text("Back")
+                                HStack {
+                                    Image(systemName: "arrow.left")
+                                    Text("Back")
+                                }
                             }
                         }
+                        ToolbarItem(placement: .principal) {
+                            Text("Settings")
+                                .foregroundColor(colorScheme == .dark ? .black : .white)
+                        }
                     }
-                    ToolbarItem(placement: .principal) {
-                        Text("Settings")
-                            .foregroundColor(colorScheme == .dark ? .black : .white)
+                    // Automatically set displayMyLines = false if Not Applicable is selected
+                    .onChange(of: selectedCharacters) { _, newValue in
+                        if newValue.contains("Not Applicable") {
+                            displayMyLines = false
+                        }
                     }
-                }
-                // Automatically set displayMyLines = false if Not Applicable is selected
-                .onChange(of: selectedCharacters) { _, newValue in
-                    if newValue.contains("Not Applicable") {
-                        displayMyLines = false
-                    }
-                }
-            } else {
-                // MARK: Script Reading Page
-                VStack {
-                    ScrollViewReader { proxy in
-                        ScrollView {
-                            VStack(alignment: .leading, spacing: 10) {
-                                ForEach(dialogue.indices, id: \.self) { index in
-                                    let entry = dialogue[index]
-
-                                    if displayLinesAsRead {
-                                        if index <= currentUtteranceIndex {
+                } else {
+                    // MARK: Script Reading Page
+                    VStack {
+                        ScrollViewReader { proxy in
+                            ScrollView {
+                                VStack(alignment: .leading, spacing: 10) {
+                                    ForEach(dialogue.indices, id: \.self) { index in
+                                        let entry = dialogue[index]
+                                        
+                                        if displayLinesAsRead {
+                                            if index <= currentUtteranceIndex {
+                                                lineView(for: entry, at: index)
+                                            }
+                                        } else {
                                             lineView(for: entry, at: index)
                                         }
-                                    } else {
-                                        lineView(for: entry, at: index)
+                                    }
+                                }
+                                .padding()
+                                .onChange(of: currentUtteranceIndex) { _, _ in
+                                    withAnimation {
+                                        proxy.scrollTo(currentUtteranceIndex, anchor: .top)
                                     }
                                 }
                             }
-                            .padding()
-                            .onChange(of: currentUtteranceIndex) { _ in
-                                withAnimation {
-                                    proxy.scrollTo(currentUtteranceIndex, anchor: .top)
+                            .background(Color(UIColor.systemBackground))
+                        }
+                        .background(Color(UIColor.systemBackground))
+                        
+                        VStack {
+                            if isUserLine {
+                                Button(action: {
+                                    userLineFinished()
+                                }) {
+                                    Text("Continue")
+                                        .font(.headline)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(Color.orange)
+                                        .foregroundColor(.white)
+                                        .cornerRadius(10)
+                                }
+                                .padding(.horizontal)
+                            } else {
+                                Button(action: pauseOrResumeSpeech) {
+                                    Text(isPaused ? "Resume" : "Pause")
+                                        .font(.headline)
+                                        .frame(maxWidth: .infinity)
+                                        .padding()
+                                        .background(isPaused ? Color.green : Color.yellow)
+                                        .foregroundColor(.white)
+                                        .cornerRadius(10)
+                                }
+                                .padding(.horizontal)
+                            }
+                        }
+                        .padding(.bottom, 20)
+                    }
+                    .navigationTitle("SceneAloud")
+                    .navigationBarTitleDisplayMode(.inline)
+                    .toolbar {
+                        ToolbarItem(placement: .navigationBarLeading) {
+                            Button(action: {
+                                restartScript(keepSettings: false)
+                            }) {
+                                HStack {
+                                    Image(systemName: "arrow.left")
+                                    Text("Back")
                                 }
                             }
                         }
-                        .background(Color(UIColor.systemBackground))
                     }
-                    .background(Color(UIColor.systemBackground))
-
-                    VStack {
-                        if isUserLine {
-                            Button(action: {
-                                userLineFinished()
-                            }) {
-                                Text("Continue")
-                                    .font(.headline)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(Color.orange)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(10)
-                            }
-                            .padding(.horizontal)
-                        } else {
-                            Button(action: pauseOrResumeSpeech) {
-                                Text(isPaused ? "Resume" : "Pause")
-                                    .font(.headline)
-                                    .frame(maxWidth: .infinity)
-                                    .padding()
-                                    .background(isPaused ? Color.green : Color.yellow)
-                                    .foregroundColor(.white)
-                                    .cornerRadius(10)
-                            }
-                            .padding(.horizontal)
-                        }
-                    }
-                    .padding(.bottom, 20)
-                }
-                .navigationTitle("SceneAloud")
-                .navigationBarTitleDisplayMode(.inline)
-                .toolbar {
-                    ToolbarItem(placement: .navigationBarLeading) {
-                        Button(action: {
-                            restartScript(keepSettings: false)
-                        }) {
-                            HStack {
-                                Image(systemName: "arrow.left")
-                                Text("Back")
-                            }
+                    .onAppear(perform: initializeSpeech)
+                    .onChange(of: currentUtteranceIndex) { _, newValue in
+                        if newValue % 10 == 0 {   // autosave every 10 lines
+                            saveOrUpdateLibraryEntry()
                         }
                     }
                 }
-                .onAppear(perform: initializeSpeech)
+            }
+            .navigationBarHidden(isShowingSplash)
+            .alert(isPresented: $showScriptCompletionAlert) {
+                Alert(
+                    title: Text("You’ve reached the end!"),
+                    message: Text("Would you like to keep the same settings or change your settings?"),
+                    primaryButton: .default(Text("Keep Settings")) {
+                        restartScript(keepSettings: true)
+                    },
+                    secondaryButton: .default(Text("Change Settings")) {
+                        restartScript(keepSettings: false)
+                    }
+                )
             }
         }
-        .navigationBarHidden(isShowingSplash)
-        .alert(isPresented: $showScriptCompletionAlert) {
-            Alert(
-                title: Text("You’ve reached the end!"),
-                message: Text("Would you like to keep the same settings or change your settings?"),
-                primaryButton: .default(Text("Keep Settings")) {
-                    restartScript(keepSettings: true)
-                },
-                secondaryButton: .default(Text("Change Settings")) {
-                    restartScript(keepSettings: false)
-                }
-            )
+        .sheet(isPresented: $showSideMenu) {
+            SideMenuView()
+                .environmentObject(library)
+        }
+        .onChange(of: library.selectedScript) { _, newValue in
+            if let script = newValue {
+                loadSavedScript(script)
+                library.selectedScript = nil        // clear so a second tap re-fires
+            }
         }
     }
 
@@ -618,6 +639,68 @@ struct ContentView: View {
         }
 
         return convertedLines.joined(separator: "\n")
+    }
+    
+    // MARK: - Library Save/Update
+    private func saveOrUpdateLibraryEntry() {
+        let savedSettings = ScriptSettings(
+            selectedCharacters: Array(selectedCharacters),
+            displayLinesAsRead: displayLinesAsRead,
+            displayMyLines: displayMyLines
+        )
+
+        // Build a descriptive title  ──────────────
+        let baseTitle = uploadedFileName.isEmpty ? "Typed Script" : uploadedFileName
+        let characterLabel: String = {
+            if selectedCharacters.contains("Not Applicable") || selectedCharacters.isEmpty {
+                return "Just Listening"
+            } else {
+                return selectedCharacters.sorted().joined(separator: ", ")
+            }
+        }()
+        let fullTitle = "\(baseTitle) : \(characterLabel)"
+
+        if let id = currentSavedScriptID,
+           let existing = library.scripts.first(where: { $0.id == id }) {
+            // Update existing record
+            var updated = existing
+            updated.settings = savedSettings
+            updated.title = fullTitle
+            updated.progressIndex = currentUtteranceIndex
+            library.update(updated)
+        } else {
+            // Create new record
+            let newEntry = SavedScript(
+                id: UUID(),
+                title: fullTitle,
+                rawText: fileContent,
+                settings: savedSettings,
+                progressIndex: currentUtteranceIndex,
+                dateSaved: Date()
+            )
+            library.add(newEntry)
+            currentSavedScriptID = newEntry.id
+        }
+    }
+    
+    // MARK: - Load Saved Script
+    private func loadSavedScript(_ saved: SavedScript) {
+        uploadedFileName      = saved.title
+        fileContent           = saved.rawText
+        dialogue              = extractDialogue(from: saved.rawText)
+        characters            = Array(Set(dialogue.map(\.character))).sorted()
+
+        selectedCharacters    = Set(saved.settings.selectedCharacters)
+        displayLinesAsRead    = saved.settings.displayLinesAsRead
+        displayMyLines        = saved.settings.displayMyLines
+
+        currentUtteranceIndex = saved.progressIndex
+        currentSavedScriptID  = saved.id
+
+        // Navigation flags
+        hasUploadedFile    = true
+        hasPressedContinue = selectedCharacters.isEmpty ? false : true
+        isCharacterSelected = !selectedCharacters.isEmpty
     }
 
     // MARK: - Helper Functions

@@ -59,6 +59,8 @@
 //    @State private var isShowingDocumentPicker: Bool = false
 //    @State private var selectedFileURL: URL? = nil
 //    @State private var hasUploadedFile: Bool = false
+//    @State private var hasPressedContinue: Bool = false
+//    @State private var uploadedFileName: String = ""
 //    @State private var inputType: ScriptInputType = .text  // Default to text file input
 //    @State private var splashPlayer = AVPlayer()
 //    @State private var videoFinished = false
@@ -145,6 +147,8 @@
 //                            self.dialogue = self.extractDialogue(from: convertedScript)
 //                            let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
 //                            self.characters = extractedCharacters
+//                            self.uploadedFileName = "Typed Script"
+//                            self.hasPressedContinue = false
 //                            self.hasUploadedFile = true
 //                        }) {
 //                            Text("Submit Script")
@@ -246,6 +250,60 @@
 //                    Spacer()
 //                }
 //                .padding()
+//            } else if !hasPressedContinue {       // NEW Continue page
+//                VStack(spacing: 20) {
+//                    Text("Script Uploaded!")
+//                        .font(.largeTitle)
+//                        .bold()
+//                        .padding(.top, 20)
+//
+//                    Text("Press Continue to select your settings.")
+//                        .font(.body)
+//                        .multilineTextAlignment(.center)
+//                        .padding(.horizontal, 40)
+//                    
+//                    HStack {
+//                        Text(uploadedFileName)
+//                            .font(.title2)
+//                            .lineLimit(1)
+//                            .truncationMode(.middle)
+//
+//                        Spacer()
+//
+//                        Button(action: {
+//                            // Remove the uploaded script and return to the original upload screen
+//                            uploadedFileName = ""
+//                            fileContent = ""
+//                            selectedFileURL = nil
+//                            dialogue = []
+//                            characters = []
+//                            selectedCharacters = []
+//                            hasUploadedFile = false
+//                            hasPressedContinue = false
+//                        }) {
+//                            Image(systemName: "xmark.circle.fill")
+//                                .font(.title2)
+//                                .foregroundColor(.red)
+//                        }
+//                        .accessibilityLabel("Remove uploaded script")
+//                    }
+//                    .padding(.horizontal, 40)
+//                    .padding(.top, 10)
+//
+//                    Button(action: { hasPressedContinue = true }) {
+//                        Text("Continue")
+//                            .font(.headline)
+//                            .frame(maxWidth: .infinity)
+//                            .padding()
+//                            .background(Color.blue)
+//                            .foregroundColor(.white)
+//                            .cornerRadius(10)
+//                    }
+//                    .padding(.horizontal, 40)
+//
+//                    Spacer()
+//                }
+//                .padding()
 //            } else if !isCharacterSelected {
 //                // MARK: Settings Page
 //                ZStack(alignment: .topLeading) {
@@ -315,18 +373,17 @@
 //                            .padding(.top, 20)
 //
 //                            // "Display my lines" row with info button and toggle, disable if Not Applicable is selected
-//                            VStack(alignment: .leading, spacing: 0) {
-//                                HStack {
-//                                    Text("Display my lines")
-//                                        .font(.title2)
-//                                    Button(action: {
-//                                        activeAlert = .displayMyLinesInfo
-//                                    }) {
-//                                        Image(systemName: "info.circle")
-//                                            .foregroundColor(.blue)
-//                                    }
-//                                    .buttonStyle(PlainButtonStyle())
+//                            HStack {
+//                                Text("Display my lines")
+//                                    .font(.title2)
+//                                Button(action: {
+//                                    activeAlert = .displayMyLinesInfo
+//                                }) {
+//                                    Image(systemName: "info.circle")
+//                                        .foregroundColor(.blue)
 //                                }
+//                                .buttonStyle(PlainButtonStyle())
+//                                Spacer()
 //                                Toggle("", isOn: $displayMyLines)
 //                                    .labelsHidden()
 //                                    .disabled(selectedCharacters.contains("Not Applicable"))
@@ -397,12 +454,12 @@
 //                .toolbar {
 //                    ToolbarItem(placement: .navigationBarLeading) {
 //                        Button(action: {
-//                            hasUploadedFile = false
-//                            selectedFileURL = nil
+//                            // Jump back to the Continue screen but keep the uploaded script info
+//                            hasPressedContinue = false
 //                        }) {
 //                            HStack {
 //                                Image(systemName: "arrow.left")
-//                                Text("Back to Upload")
+//                                Text("Back")
 //                            }
 //                        }
 //                    }
@@ -600,7 +657,9 @@
 //
 //            print("✅ Characters Loaded: \(characters)")
 //
+//            self.uploadedFileName = url.lastPathComponent
 //            self.hasUploadedFile = true
+//            self.hasPressedContinue = false
 //        } catch {
 //            self.fileContent = "Error loading file content."
 //            print("❌ Error loading file content: \(error.localizedDescription)")
@@ -783,5 +842,4 @@
 //        completion()
 //    }
 //}
-//
 //
