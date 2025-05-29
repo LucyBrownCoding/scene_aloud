@@ -14,12 +14,6 @@ enum ScriptInputType: String, CaseIterable, Identifiable {
     var id: String { self.rawValue }
 }
 
-// MARK: - Model used by the Library overlay
-struct ScriptRecord: Identifiable, Equatable {
-    let id = UUID()
-    let fileName: String
-    let content: String
-}
 
 struct ContentView: View {
     // MARK: - State Variables
@@ -70,7 +64,10 @@ struct ContentView: View {
     @State private var videoFinished = false
     @Environment(\.colorScheme) private var colorScheme
     @State private var isLibraryOpen: Bool = false
-    @State private var selectedLibraryItem: ScriptRecord? = nil
+    
+    // Updated to use LibraryManager
+    @StateObject private var libraryManager = LibraryManager()
+    @State private var currentSavedScript: SavedScript? = nil
 
     var body: some View {
         ZStack(alignment: .leading) {
@@ -79,7 +76,7 @@ struct ContentView: View {
             }
             .navigationBarHidden(isShowingSplash)
             
-            // Library slide-in panel (recreating your original functionality)
+            // Library slide-in panel (updated to use LibraryManager)
             if isLibraryOpen {
                 // Dark overlay background
                 Color.black.opacity(0.3)
@@ -91,7 +88,8 @@ struct ContentView: View {
                     }
                 
                 // Library panel
-                VStack(alignment: .leading) {
+                VStack(alignment: .leading, spacing: 0) {
+                    // Header
                     HStack {
                         Text("Library")
                             .font(.title2)
@@ -109,37 +107,76 @@ struct ContentView: View {
                         }
                     }
                     .padding()
+                    .background(Color(UIColor.secondarySystemBackground))
                     
-                    // Add your library content here
-                    // This should match whatever was in your original library overlay
-                    ScrollView {
-                        LazyVStack(alignment: .leading, spacing: 10) {
-                            // Placeholder - replace with your actual library items
-                            ForEach(0..<5) { index in
-                                Button(action: {
-                                    // Handle script selection
-                                    // You'll need to set selectedLibraryItem here
-                                    withAnimation {
-                                        isLibraryOpen = false
+                    // Scripts list
+                    if libraryManager.scripts.isEmpty {
+                        VStack {
+                            Spacer()
+                            Text("No saved scripts")
+                                .foregroundColor(.secondary)
+                                .font(.body)
+                            Text("Scripts will appear here after you save them")
+                                .foregroundColor(.secondary)
+                                .font(.caption)
+                                .multilineTextAlignment(.center)
+                            Spacer()
+                        }
+                        .padding()
+                    } else {
+                        ScrollView {
+                            LazyVStack(alignment: .leading, spacing: 12) {
+                                ForEach(libraryManager.scripts.sorted(by: { $0.dateSaved > $1.dateSaved })) { script in
+                                    Button(action: {
+                                        libraryManager.select(script)
+                                    }) {
+                                        VStack(alignment: .leading, spacing: 8) {
+                                            HStack {
+                                                Text(script.title)
+                                                    .font(.headline)
+                                                    .foregroundColor(.primary)
+                                                    .lineLimit(1)
+                                                
+                                                Spacer()
+                                                
+                                                Text(script.dateSaved, style: .date)
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                            
+                                            HStack {
+                                                // Progress indicator
+                                                let totalLines = script.rawText.components(separatedBy: .newlines)
+                                                    .filter { $0.contains(":") }.count
+                                                if totalLines > 0 {
+                                                    Text("Progress: \(script.progressIndex)/\(totalLines)")
+                                                        .font(.caption)
+                                                        .foregroundColor(.secondary)
+                                                }
+                                                
+                                                Spacer()
+                                                
+                                                // Character count
+                                                Text("\(script.settings.selectedCharacters.count) characters")
+                                                    .font(.caption)
+                                                    .foregroundColor(.secondary)
+                                            }
+                                        }
+                                        .padding()
+                                        .background(Color(UIColor.secondarySystemBackground))
+                                        .cornerRadius(8)
                                     }
-                                }) {
-                                    HStack {
-                                        Text("Script \(index + 1)")
-                                            .foregroundColor(.primary)
-                                        Spacer()
-                                    }
-                                    .padding()
-                                    .background(Color(UIColor.secondarySystemBackground))
-                                    .cornerRadius(8)
+                                    .buttonStyle(PlainButtonStyle())
                                 }
                             }
+                            .padding(.horizontal)
+                            .padding(.vertical, 8)
                         }
-                        .padding(.horizontal)
                     }
                     
                     Spacer()
                 }
-                .frame(maxWidth: 300)
+                .frame(maxWidth: 320)
                 .background(Color(UIColor.systemBackground))
                 .transition(.move(edge: .leading))
             }
@@ -156,10 +193,13 @@ struct ContentView: View {
                 }
             )
         }
-        .onChange(of: selectedLibraryItem) { _, newValue in
-            if let record = newValue {
-                loadScript(from: record)
-                isLibraryOpen = false
+        .onChange(of: libraryManager.selectedScript) { _, newValue in
+            if let script = newValue {
+                loadScript(from: script)
+                libraryManager.selectedScript = nil // Reset selection
+                withAnimation {
+                    isLibraryOpen = false
+                }
             }
         }
     }
@@ -482,6 +522,20 @@ struct ContentView: View {
                                 .frame(maxWidth: .infinity)
                                 .padding()
                                 .background(Color.blue)
+                                .foregroundColor(.white)
+                                .cornerRadius(10)
+                        }
+                        .padding(.bottom, 10)
+                        
+                        // Save Script Button
+                        Button(action: {
+                            saveCurrentScript()
+                        }) {
+                            Text("Save Script")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(Color.green)
                                 .foregroundColor(.white)
                                 .cornerRadius(10)
                         }
@@ -914,6 +968,7 @@ struct ContentView: View {
 
     private func userLineFinished() {
         currentUtteranceIndex += 1
+        updateProgress()
         startNextLine()
     }
 
@@ -924,12 +979,28 @@ struct ContentView: View {
 
         let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
             currentUtteranceIndex += 1
+            updateProgress()
             startNextLine()
         }
         speechDelegate = delegate
         synthesizer.delegate = delegate
 
         synthesizer.speak(utterance)
+    }
+    
+    private func updateProgress() {
+        if let script = currentSavedScript {
+            let updatedScript = SavedScript(
+                id: script.id,
+                title: script.title,
+                rawText: script.rawText,
+                settings: script.settings,
+                progressIndex: currentUtteranceIndex,
+                dateSaved: script.dateSaved
+            )
+            libraryManager.update(updatedScript)
+            currentSavedScript = updatedScript
+        }
     }
 
     func pauseOrResumeSpeech() {
@@ -968,16 +1039,61 @@ struct ContentView: View {
         return Color.gray
     }
     
-    private func loadScript(from record: ScriptRecord) {
-        fileContent = record.content
+    // MARK: - Library Integration Functions
+    private func saveCurrentScript() {
+        let settings = ScriptSettings(
+            selectedCharacters: Array(selectedCharacters),
+            displayLinesAsRead: displayLinesAsRead,
+            displayMyLines: displayMyLines
+        )
+        
+        let script = SavedScript(
+            id: currentSavedScript?.id ?? UUID(),
+            title: uploadedFileName,
+            rawText: fileContent,
+            settings: settings,
+            progressIndex: currentUtteranceIndex,
+            dateSaved: Date()
+        )
+        
+        if currentSavedScript != nil {
+            libraryManager.update(script)
+        } else {
+            libraryManager.add(script)
+        }
+        
+        currentSavedScript = script
+    }
+    
+    private func loadScript(from script: SavedScript) {
+        // Load script content
+        fileContent = script.rawText
+        uploadedFileName = script.title
+        
+        // Convert and extract dialogue
         let convertedScript = convertScriptToCorrectFormat(from: fileContent)
         dialogue = extractDialogue(from: convertedScript)
         characters = Array(Set(dialogue.map { $0.character })).sorted()
-        selectedCharacters = []
-        uploadedFileName = record.fileName
+        
+        // Load settings
+        selectedCharacters = Set(script.settings.selectedCharacters)
+        displayLinesAsRead = script.settings.displayLinesAsRead
+        displayMyLines = script.settings.displayMyLines
+        
+        // Set progress
+        currentUtteranceIndex = script.progressIndex
+        
+        // Update state
+        currentSavedScript = script
         hasUploadedFile = true
-        hasPressedContinue = false
+        hasPressedContinue = true
+        isCharacterSelected = true
         isShowingSplash = false
+        
+        // Initialize speech if we're in the script reading view
+        if isCharacterSelected {
+            initializeSpeech()
+        }
     }
 }
 
