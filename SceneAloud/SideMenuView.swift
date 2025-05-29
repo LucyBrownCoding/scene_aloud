@@ -1,19 +1,20 @@
 import SwiftUI
 
 struct SideMenuView: View {
+    @Binding var showSheet: Bool
     @Environment(\.dismiss) private var dismiss
 
     var body: some View {
         NavigationStack {
             List {
                 NavigationLink("Library") {
-                    LibraryListView()
+                    LibraryListView(closeSheet: { showSheet = false })
                 }
             }
             .navigationTitle("Menu")
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
-                    Button("Close") { dismiss() }
+                    Button("Close") { showSheet = false }
                 }
             }
         }
@@ -25,7 +26,8 @@ struct SideMenuView: View {
 
 struct LibraryListView: View {
     @EnvironmentObject var library: LibraryManager
-    @Environment(\.dismiss) private var dismiss
+    @State private var expandedID: UUID? = nil   // tracks which row is open
+    let closeSheet: () -> Void
 
     // Sort newest first
     private var sortedScripts: [SavedScript] {
@@ -35,26 +37,56 @@ struct LibraryListView: View {
     var body: some View {
         List {
             ForEach(sortedScripts) { script in
-                Button {
-                    library.select(script) 
-                    dismiss()
-                } label: {
+                VStack(alignment: .leading, spacing: 6) {
+                    // ── Row header ────────────────────────────────
                     HStack {
-                        VStack(alignment: .leading, spacing: 4) {
+                        Image(systemName: expandedID == script.id ? "chevron.down" : "chevron.right")
+                            .foregroundColor(.secondary)
+                            .onTapGesture {
+                                withAnimation {
+                                    expandedID = (expandedID == script.id) ? nil : script.id
+                                }
+                            }
+
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(script.title)
                                 .font(.headline)
-                            Text(script.dateSaved, style: .date)
+                            Text(script.settings.selectedCharacters.isEmpty
+                                 ? "Just Listening"
+                                 : script.settings.selectedCharacters.joined(separator: ", "))
                                 .font(.caption)
                                 .foregroundColor(.secondary)
                         }
+
                         Spacer()
-                        // Simple progress indicator
-                        Text("\(script.progressIndex + 1)/\(script.rawText.split(separator: "\n").count)")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
                     }
-                    .padding(.vertical, 4)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation {
+                            expandedID = (expandedID == script.id) ? nil : script.id
+                        }
+                    }
+
+                    // ── Drop‑down details ─────────────────────────
+                    if expandedID == script.id {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Display lines as read: \(script.settings.displayLinesAsRead ? "On" : "Off")")
+                            Text("Display my lines: \(script.settings.displayMyLines ? "On" : "Off")")
+                            Text("Progress: \(script.progressIndex + 1)/\(script.rawText.split(separator: "\n").count)")
+                            HStack {
+                                Spacer()
+                                Button("Open Save") {
+                                    library.select(script)
+                                    closeSheet()
+                                }
+                                .padding(.top, 6)
+                            }
+                        }
+                        .font(.caption)
+                        .padding(.leading, 26) // indent under chevron
+                    }
                 }
+                .padding(.vertical, 4)
             }
             .onDelete(perform: library.delete)
         }
