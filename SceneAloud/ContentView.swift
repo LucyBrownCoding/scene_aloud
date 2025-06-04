@@ -14,6 +14,21 @@ enum ScriptInputType: String, CaseIterable, Identifiable {
     var id: String { self.rawValue }
 }
 
+struct SerializableColor: Codable {
+    var r, g, b, a: Double          // 0…1 range
+
+    init(_ color: Color) {
+        let ui = UIColor(color)
+        var r : CGFloat = 0, g : CGFloat = 0, b : CGFloat = 0, a : CGFloat = 0
+        ui.getRed(&r, green: &g, blue: &b, alpha: &a)
+        self.r = .init(r); self.g = .init(g); self.b = .init(b); self.a = .init(a)
+    }
+
+    var swiftUIColor: Color {
+        Color(red: r, green: g, blue: b, opacity: a)
+    }
+}
+
 
 struct ContentView: View {
     // MARK: - State Variables
@@ -35,6 +50,9 @@ struct ContentView: View {
     @State private var showScriptCompletionAlert: Bool = false
     @State private var displayLinesAsRead: Bool = true
     @State private var displayMyLines: Bool = false
+    @State private var isShowingCharacterCustomization: Bool = false
+    @State private var characterOptions: [String: CharacterOptions] = [:]
+
 
     // Unified alert enum
     enum AlertType: Identifiable {
@@ -217,10 +235,12 @@ struct ContentView: View {
             HamburgerOverlay(showSideMenu: $isLibraryOpen) {
                 continueView
             }
+        } else if !isShowingCharacterCustomization {
+            settingsView
         } else if !isCharacterSelected {
-            settingsView // This one already has toolbar buttons, so we'll handle it differently
-        } else {
-            scriptReadingView // This one already has toolbar buttons, so we'll handle it differently
+            characterCustomizationView
+        }  else {
+            scriptReadingView
         }
     }
 
@@ -320,6 +340,7 @@ struct ContentView: View {
             self.dialogue = self.extractDialogue(from: convertedScript)
             let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
             self.characters = extractedCharacters
+            ensureCharacterOptions()
             self.uploadedFileName = "Typed Script"
             self.hasPressedContinue = false
             self.hasUploadedFile = true
@@ -513,11 +534,11 @@ struct ContentView: View {
                             if selectedCharacters.isEmpty {
                                 activeAlert = .noCharacterSelected
                             } else {
-                                isCharacterSelected = true
+                                isShowingCharacterCustomization = true
                                 print("✅ Characters Selected: \(selectedCharacters)")
                             }
                         }) {
-                            Text("Done")
+                            Text("Continue")
                                 .font(.headline)
                                 .frame(maxWidth: .infinity)
                                 .padding()
@@ -633,25 +654,80 @@ struct ContentView: View {
                 .labelsHidden()
         }
         .padding(.top, 20)
-
-        HStack {
-            Text("Display my lines")
-                .font(.title2)
-            Button(action: {
-                activeAlert = .displayMyLinesInfo
-            }) {
-                Image(systemName: "info.circle")
-                    .foregroundColor(.blue)
+        VStack(alignment: .leading, spacing: 10) {
+                HStack {
+                    Text("Display my lines")
+                        .font(.title2)
+                    Button(action: {
+                        activeAlert = .displayMyLinesInfo
+                    }) {
+                        Image(systemName: "info.circle")
+                            .foregroundColor(.blue)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                Toggle("", isOn: $displayMyLines)
+                    .labelsHidden()
+                    .disabled(selectedCharacters.contains("Not Applicable"))
             }
-            .buttonStyle(PlainButtonStyle())
-            Spacer()
-            Toggle("", isOn: $displayMyLines)
-                .labelsHidden()
-                .disabled(selectedCharacters.contains("Not Applicable"))
-        }
         .padding(.vertical, 2)
     }
+    
+    // MARK: - Character Customization View
+    @ViewBuilder
+    private var characterCustomizationView: some View {
+        HamburgerOverlay(showSideMenu: $isLibraryOpen) {
+            VStack {
+                List {
+                    ForEach(characters, id: \.self) { name in
+                        Section(header: Text(name.capitalized)) {
 
+                            // Voice picker
+                            Picker("Voice", selection: Binding(
+                                get: { characterOptions[name]?.voiceID ?? "" },
+                                set: { characterOptions[name]?.voiceID = $0 }
+                            )) {
+                                ForEach(AVSpeechSynthesisVoice.speechVoices(), id: \.identifier) { v in
+                                    Text("\(v.name) (\(v.language))").tag(v.identifier)
+                                }
+                            }
+
+                            // Highlight picker
+                            ColorPicker("Highlight Color", selection: Binding(
+                                get: { characterOptions[name]?.highlight.swiftUIColor ?? .yellow },
+                                set: { newColor in
+                                    characterOptions[name]?.highlight = SerializableColor(newColor)
+                                }
+                            ))
+                        }
+                    }
+                }
+                .listStyle(.insetGrouped)
+
+                Button("Continue") {
+                    isCharacterSelected = true
+                }
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding()
+                .background(Color.blue)
+                .foregroundColor(.white)
+                .cornerRadius(10)
+                .padding([.horizontal, .bottom], 20)
+            }
+            .navigationTitle("Character Customization")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button { isShowingCharacterCustomization = false } label: {
+                        Label("Back", systemImage: "arrow.left")
+                    }
+                }
+            }
+        }
+    }
+    
+    
     // MARK: - Script Reading View
     @ViewBuilder
     private var scriptReadingView: some View {
@@ -690,7 +766,8 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
                     Button(action: {
-                        restartScript(keepSettings: false)
+                        // Go back to character customization instead of restarting script
+                        isCharacterSelected = false
                     }) {
                         HStack {
                             Image(systemName: "arrow.left")
@@ -823,7 +900,18 @@ struct ContentView: View {
         .padding(.bottom, 5)
         .id(index)
     }
+    /// Makes sure every character has a default entry in `characterOptions`
+    private func ensureCharacterOptions() {
+        let fallback: [Color] = [.orange, .blue, .pink, .purple, .red, .teal]
 
+        for (idx, name) in characters.enumerated() where characterOptions[name] == nil {
+            characterOptions[name] = CharacterOptions(
+                voiceID: AVSpeechSynthesisVoice.currentLanguageCode(),
+                highlight: SerializableColor(fallback[idx % fallback.count])
+            )
+        }
+    }
+    
     // MARK: - Script Conversion Function
     func convertScriptToCorrectFormat(from text: String) -> String {
         let lines = text.components(separatedBy: .newlines)
@@ -901,6 +989,7 @@ struct ContentView: View {
 
             let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
             self.characters = extractedCharacters
+            ensureCharacterOptions()
 
             print("✅ Characters Loaded: \(characters)")
 
@@ -931,7 +1020,8 @@ struct ContentView: View {
 
         return extractedDialogue
     }
-
+    
+    
     // MARK: - Speech Functions
     func initializeSpeech() {
         currentUtteranceIndex = 0
@@ -953,7 +1043,7 @@ struct ContentView: View {
         let entry = dialogue[currentUtteranceIndex]
         if selectedCharacters.contains("Not Applicable") {
             isUserLine = false
-            speakLine(entry.line)
+            speakLine(entry.line, for: entry.character)
         } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
             if displayMyLines {
                 isUserLine = true
@@ -962,7 +1052,7 @@ struct ContentView: View {
             }
         } else {
             isUserLine = false
-            speakLine(entry.line)
+            speakLine(entry.line, for: entry.character)
         }
     }
 
@@ -972,9 +1062,15 @@ struct ContentView: View {
         startNextLine()
     }
 
-    private func speakLine(_ text: String) {
+    /// Speaks the line using the chosen voice for its character
+    private func speakLine(_ text: String, for character: String) {
         let utterance = AVSpeechUtterance(string: text)
-        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+
+        // Apply the user-picked voice if one is set
+        if let id = characterOptions[character]?.voiceID,
+           let voice = AVSpeechSynthesisVoice(identifier: id) {
+            utterance.voice = voice
+        }
         utterance.postUtteranceDelay = 0.5
 
         let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
@@ -984,7 +1080,6 @@ struct ContentView: View {
         }
         speechDelegate = delegate
         synthesizer.delegate = delegate
-
         synthesizer.speak(utterance)
     }
     
@@ -1025,18 +1120,14 @@ struct ContentView: View {
             initializeSpeech()
         } else {
             isCharacterSelected = false
+            isShowingCharacterCustomization = false
             selectedCharacters = []
             displayLinesAsRead = true
         }
     }
 
     func colorForCharacter(_ character: String) -> Color {
-        let colors: [Color] = [.orange, .blue, .pink, .purple, .red, .teal]
-        let sortedSelections = selectedCharacters.sorted()
-        if let index = sortedSelections.firstIndex(of: character) {
-            return colors[index % colors.count]
-        }
-        return Color.gray
+        characterOptions[character]?.highlight.swiftUIColor ?? .gray
     }
     
     // MARK: - Library Integration Functions
@@ -1074,6 +1165,7 @@ struct ContentView: View {
         let convertedScript = convertScriptToCorrectFormat(from: fileContent)
         dialogue = extractDialogue(from: convertedScript)
         characters = Array(Set(dialogue.map { $0.character })).sorted()
+        ensureCharacterOptions()
         
         // Load settings
         selectedCharacters = Set(script.settings.selectedCharacters)
@@ -1087,6 +1179,7 @@ struct ContentView: View {
         currentSavedScript = script
         hasUploadedFile = true
         hasPressedContinue = true
+        isShowingCharacterCustomization = true
         isCharacterSelected = true
         isShowingSplash = false
         
@@ -1097,6 +1190,11 @@ struct ContentView: View {
     }
 }
 
+/// Holds the per-character voice & highlight that the user chooses
+struct CharacterOptions: Codable {
+    var voiceID: String
+    var highlight: SerializableColor      // instead of Color
+}
 // MARK: - AVSpeechSynthesizerDelegateWrapper
 class AVSpeechSynthesizerDelegateWrapper: NSObject, AVSpeechSynthesizerDelegate {
     private let completion: () -> Void
