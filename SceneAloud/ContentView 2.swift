@@ -14,6 +14,21 @@
 //    var id: String { self.rawValue }
 //}
 //
+//struct SerializableColor: Codable {
+//    var r, g, b, a: Double          // 0…1 range
+//
+//    init(_ color: Color) {
+//        let ui = UIColor(color)
+//        var r : CGFloat = 0, g : CGFloat = 0, b : CGFloat = 0, a : CGFloat = 0
+//        ui.getRed(&r, green: &g, blue: &b, alpha: &a)
+//        self.r = .init(r); self.g = .init(g); self.b = .init(b); self.a = .init(a)
+//    }
+//
+//    var swiftUIColor: Color {
+//        Color(red: r, green: g, blue: b, opacity: a)
+//    }
+//}
+//
 //
 //struct ContentView: View {
 //    // MARK: - State Variables
@@ -36,6 +51,7 @@
 //    @State private var displayLinesAsRead: Bool = true
 //    @State private var displayMyLines: Bool = false
 //    @State private var isShowingCharacterCustomization: Bool = false
+//    @State private var characterOptions: [String: CharacterOptions] = [:]
 //
 //
 //    // Unified alert enum
@@ -324,6 +340,8 @@
 //            self.dialogue = self.extractDialogue(from: convertedScript)
 //            let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
 //            self.characters = extractedCharacters
+//            ensureCharacterOptions()
+//            updateHighlightColors() // Set initial colors
 //            self.uploadedFileName = "Typed Script"
 //            self.hasPressedContinue = false
 //            self.hasUploadedFile = true
@@ -495,87 +513,87 @@
 //    // MARK: - Settings View
 //    @ViewBuilder
 //    private var settingsView: some View {
-//        HamburgerOverlay(showSideMenu: $isLibraryOpen) {
-//            ZStack(alignment: .topLeading) {
-//                VStack(spacing: 0) {
-//                    VStack(alignment: .leading) {
-//                        Text("Settings")
-//                            .font(.largeTitle)
-//                            .bold()
+//            HamburgerOverlay(showSideMenu: $isLibraryOpen) {
+//                ZStack(alignment: .topLeading) {
+//                    VStack(spacing: 0) {
+//                        VStack(alignment: .leading) {
+//                            // Removed the large bold "Settings" title
+//                            // Now only uses the navigation title at the top
+//                            
+//                            Text("Select your characters")
+//                                .font(.title2)
+//                                .padding(.vertical, 5)
 //
-//                        Text("Select your characters")
-//                            .font(.title2)
-//                            .padding(.vertical, 5)
+//                            characterSelectionSection
 //
-//                        characterSelectionSection
+//                            displaySettingsSection
 //
-//                        displaySettingsSection
+//                            Spacer()
 //
-//                        Spacer()
-//
-//                        Button(action: {
-//                            if selectedCharacters.isEmpty {
-//                                activeAlert = .noCharacterSelected
-//                            } else {
-//                                isShowingCharacterCustomization = true
-//                                print("✅ Characters Selected: \(selectedCharacters)")
+//                            Button(action: {
+//                                if selectedCharacters.isEmpty {
+//                                    activeAlert = .noCharacterSelected
+//                                } else {
+//                                    updateHighlightColors() // Update colors before going to customization
+//                                    isShowingCharacterCustomization = true
+//                                    print("✅ Characters Selected: \(selectedCharacters)")
+//                                }
+//                            }) {
+//                                Text("Continue")
+//                                    .font(.headline)
+//                                    .frame(maxWidth: .infinity)
+//                                    .padding()
+//                                    .background(Color.blue)
+//                                    .foregroundColor(.white)
+//                                    .cornerRadius(10)
 //                            }
-//                        }) {
-//                            Text("Continue")
-//                                .font(.headline)
-//                                .frame(maxWidth: .infinity)
-//                                .padding()
-//                                .background(Color.blue)
-//                                .foregroundColor(.white)
-//                                .cornerRadius(10)
+//                            .padding(.bottom, 10)
+//                            
+//                            // Save Script Button
+//                            Button(action: {
+//                                saveCurrentScript()
+//                            }) {
+//                                Text("Save Script")
+//                                    .font(.headline)
+//                                    .frame(maxWidth: .infinity)
+//                                    .padding()
+//                                    .background(Color.green)
+//                                    .foregroundColor(.white)
+//                                    .cornerRadius(10)
+//                            }
+//                            .padding(.bottom, 20)
 //                        }
-//                        .padding(.bottom, 10)
-//                        
-//                        // Save Script Button
+//                        .padding(.horizontal, 20)
+//                        .padding(.top, 10) // Adjusted top padding since we removed the large title
+//                    }
+//                }
+//                .alert(item: $activeAlert) { alert in
+//                    alertForType(alert)
+//                }
+//                .frame(maxHeight: .infinity, alignment: .top)
+//                .navigationTitle("Settings") // This creates the small title at the top
+//                .navigationBarTitleDisplayMode(.inline) // Ensures small title format
+//                .toolbar {
+//                    ToolbarItem(placement: .navigationBarLeading) {
 //                        Button(action: {
-//                            saveCurrentScript()
+//                            hasPressedContinue = false
 //                        }) {
-//                            Text("Save Script")
-//                                .font(.headline)
-//                                .frame(maxWidth: .infinity)
-//                                .padding()
-//                                .background(Color.green)
-//                                .foregroundColor(.white)
-//                                .cornerRadius(10)
-//                        }
-//                        .padding(.bottom, 20)
-//                    }
-//                    .padding(.horizontal, 20)
-//                    .padding(.top, -8)
-//                }
-//            }
-//            .alert(item: $activeAlert) { alert in
-//                alertForType(alert)
-//            }
-//            .frame(maxHeight: .infinity, alignment: .top)
-//            .toolbar {
-//                ToolbarItem(placement: .navigationBarLeading) {
-//                    Button(action: {
-//                        hasPressedContinue = false
-//                    }) {
-//                        HStack {
-//                            Image(systemName: "arrow.left")
-//                            Text("Back")
+//                            HStack {
+//                                Image(systemName: "arrow.left")
+//                                Text("Back")
+//                            }
 //                        }
 //                    }
 //                }
-//                ToolbarItem(placement: .principal) {
-//                    Text("Settings")
-//                        .foregroundColor(colorScheme == .dark ? .black : .white)
-//                }
-//            }
-//            .onChange(of: selectedCharacters) { _, newValue in
-//                if newValue.contains("Not Applicable") {
-//                    displayMyLines = false
+//                .onChange(of: selectedCharacters) { _, newValue in
+//                    if newValue.contains("Not Applicable") {
+//                        displayMyLines = false
+//                    }
+//                    // Update highlight colors when character selection changes
+//                    updateHighlightColors()
 //                }
 //            }
 //        }
-//    }
 //
 //    // MARK: - Character Selection Section
 //    @ViewBuilder
@@ -657,27 +675,66 @@
 //    }
 //    
 //    // MARK: - Character Customization View
-//    @ViewBuilder
-//    private var characterCustomizationView: some View {
-//        HamburgerOverlay(showSideMenu: $isLibraryOpen) {
+//        @ViewBuilder
+//        private var characterCustomizationView: some View {
+//            HamburgerOverlay(showSideMenu: $isLibraryOpen) {
+//                VStack {
+//                    List {
+//                        ForEach(characters, id: \.self) { name in
+//                            Section(header: Text(name.capitalized)) {
+//
+//                                // Voice picker
+//                                Picker("Voice", selection: Binding(
+//                                    get: { characterOptions[name]?.voiceID ?? "" },
+//                                    set: { characterOptions[name]?.voiceID = $0 }
+//                                )) {
+//                                    ForEach(AVSpeechSynthesisVoice.speechVoices(), id: \.identifier) { v in
+//                                        Text("\(v.name) (\(v.language))").tag(v.identifier)
+//                                    }
+//                                }
+//
+//                                // Highlight picker
+//                                ColorPicker("Highlight Color", selection: Binding(
+//                                    get: { characterOptions[name]?.highlight.swiftUIColor ?? .yellow },
+//                                    set: { newColor in
+//                                        characterOptions[name]?.highlight = SerializableColor(newColor)
+//                                    }
+//                                ))
+//                            }
+//                        }
+//                    }
+//                    .listStyle(.insetGrouped)
+//
+//                    // Use the new button section
+//                    characterCustomizationButtonSection
+//                }
+//                .navigationTitle("Character Customization")
+//                .navigationBarTitleDisplayMode(.inline)
+//                .toolbar {
+//                    ToolbarItem(placement: .navigationBarLeading) {
+//                        Button {
+//                            // Auto-pause speech when going back (if somehow still playing)
+//                            pauseSpeechForNavigation()
+//                            isShowingCharacterCustomization = false
+//                        } label: {
+//                            Label("Back", systemImage: "arrow.left")
+//                        }
+//                    }
+//                }
+//                .onAppear {
+//                    // Ensure character options are properly initialized when view appears
+//                    ensureCharacterOptions()
+//                    updateHighlightColors()
+//                }
+//            }
+//        }
+//
+//        // MARK: - Character Customization Button Section
+//        @ViewBuilder
+//        private var characterCustomizationButtonSection: some View {
 //            VStack {
-//                Spacer()
-//                
-//                // Placeholder content area - you can add customization options here later
-//                Text("Character Customization")
-//                    .font(.title)
-//                    .foregroundColor(.secondary)
-//                
-//                Text("Coming Soon...")
-//                    .font(.body)
-//                    .foregroundColor(.secondary)
-//                
-//                Spacer()
-//                
-//                // Continue button at the bottom
 //                Button(action: {
 //                    isCharacterSelected = true
-//                    print("✅ Proceeding to script from character customization")
 //                }) {
 //                    Text("Continue")
 //                        .font(.headline)
@@ -689,76 +746,76 @@
 //                }
 //                .padding(.horizontal, 20)
 //                .padding(.bottom, 20)
-//            }
-//            .navigationTitle("Character Customization")
-//            .navigationBarTitleDisplayMode(.inline)
-//            .toolbar {
-//                ToolbarItem(placement: .navigationBarLeading) {
-//                    Button(action: {
-//                        isShowingCharacterCustomization = false
-//                    }) {
-//                        HStack {
-//                            Image(systemName: "arrow.left")
-//                            Text("Back")
-//                        }
-//                    }
-//                }
+//                .padding(.top, 10)
 //            }
 //        }
-//    }
+//
 //    
 //    
 //    // MARK: - Script Reading View
 //    @ViewBuilder
 //    private var scriptReadingView: some View {
-//        HamburgerOverlay(showSideMenu: $isLibraryOpen) {
-//            VStack {
-//                ScrollViewReader { proxy in
-//                    ScrollView {
-//                        VStack(alignment: .leading, spacing: 10) {
-//                            ForEach(dialogue.indices, id: \.self) { index in
-//                                let entry = dialogue[index]
+//            HamburgerOverlay(showSideMenu: $isLibraryOpen) {
+//                VStack {
+//                    ScrollViewReader { proxy in
+//                        ScrollView {
+//                            VStack(alignment: .leading, spacing: 10) {
+//                                ForEach(dialogue.indices, id: \.self) { index in
+//                                    let entry = dialogue[index]
 //
-//                                if displayLinesAsRead {
-//                                    if index <= currentUtteranceIndex {
+//                                    if displayLinesAsRead {
+//                                        if index <= currentUtteranceIndex {
+//                                            lineView(for: entry, at: index)
+//                                        }
+//                                    } else {
 //                                        lineView(for: entry, at: index)
 //                                    }
-//                                } else {
-//                                    lineView(for: entry, at: index)
+//                                }
+//                            }
+//                            .padding()
+//                            .onChange(of: currentUtteranceIndex) { _ in
+//                                withAnimation {
+//                                    proxy.scrollTo(currentUtteranceIndex, anchor: .top)
 //                                }
 //                            }
 //                        }
-//                        .padding()
-//                        .onChange(of: currentUtteranceIndex) { _ in
-//                            withAnimation {
-//                                proxy.scrollTo(currentUtteranceIndex, anchor: .top)
+//                        .background(Color(UIColor.systemBackground))
+//                    }
+//                    .background(Color(UIColor.systemBackground))
+//
+//                    controlButtonsSection
+//                }
+//                .navigationTitle("SceneAloud")
+//                .navigationBarTitleDisplayMode(.inline)
+//                .toolbar {
+//                    ToolbarItem(placement: .navigationBarLeading) {
+//                        Button(action: {
+//                            // Auto-pause speech when going back
+//                            pauseSpeechForNavigation()
+//                            // Go back to character customization
+//                            isCharacterSelected = false
+//                        }) {
+//                            HStack {
+//                                Image(systemName: "arrow.left")
+//                                Text("Back")
 //                            }
 //                        }
 //                    }
-//                    .background(Color(UIColor.systemBackground))
 //                }
-//                .background(Color(UIColor.systemBackground))
-//
-//                controlButtonsSection
-//            }
-//            .navigationTitle("SceneAloud")
-//            .navigationBarTitleDisplayMode(.inline)
-//            .toolbar {
-//                ToolbarItem(placement: .navigationBarLeading) {
-//                    Button(action: {
-//                        // Go back to character customization instead of restarting script
-//                        isCharacterSelected = false
-//                    }) {
-//                        HStack {
-//                            Image(systemName: "arrow.left")
-//                            Text("Back")
-//                        }
-//                    }
+//                .onAppear(perform: initializeSpeech)
+//                .onDisappear {
+//                    // Auto-pause when view disappears for any reason
+//                    pauseSpeechForNavigation()
 //                }
 //            }
-//            .onAppear(perform: initializeSpeech)
 //        }
-//    }
+//    
+//    private func pauseSpeechForNavigation() {
+//            if synthesizer.isSpeaking {
+//                synthesizer.pauseSpeaking(at: .immediate)
+//                isPaused = true
+//            }
+//        }
 //
 //    // MARK: - Control Buttons Section
 //    @ViewBuilder
@@ -832,55 +889,214 @@
 //    }
 //
 //    // MARK: - Line View
-//    @ViewBuilder
-//    private func lineView(for entry: (character: String, line: String), at index: Int) -> some View {
-//        VStack(alignment: .leading, spacing: 4) {
-//            Text(entry.character)
-//                .font(.headline)
-//                .foregroundColor(.primary)
+//        @ViewBuilder
+//        private func lineView(for entry: (character: String, line: String), at index: Int) -> some View {
+//            VStack(alignment: .leading, spacing: 4) {
+//                Text(entry.character)
+//                    .font(.headline)
+//                    .foregroundColor(.primary)
 //
-//            if selectedCharacters.contains("Not Applicable") {
-//                Text(entry.line)
-//                    .font(.body)
-//                    .padding(5)
-//                    .background(
-//                        index == currentUtteranceIndex ? Color.yellow.opacity(0.7) : Color.clear
-//                    )
-//                    .cornerRadius(5)
-//            } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
-//                if displayMyLines {
+//                if selectedCharacters.contains("Not Applicable") {
+//                    // When "Not Applicable" is selected, check THIS character's color individually
+//                    let characterColor = colorForCharacter(entry.character)
+//                    let isThisCharacterGray = isColorGray(characterColor)
+//                    
 //                    Text(entry.line)
 //                        .font(.body)
 //                        .padding(5)
-//                        .frame(maxWidth: .infinity, alignment: .leading)
 //                        .background(
-//                            index == currentUtteranceIndex ? colorForCharacter(entry.character).opacity(0.7) : Color.clear
+//                            isThisCharacterGray ?
+//                            // If THIS character has gray color, only highlight current line
+//                            (index == currentUtteranceIndex ?
+//                             characterColor.opacity(0.7) :
+//                             Color.clear
+//                            ) :
+//                            // If THIS character has custom color, show persistently
+//                            (index == currentUtteranceIndex ?
+//                             characterColor.opacity(0.7) :
+//                             characterColor.opacity(0.2)
+//                            )
 //                        )
 //                        .cornerRadius(5)
+//                } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
+//                    // This is a user-selected character - always show background, bright when current
+//                    if displayMyLines {
+//                        Text(entry.line)
+//                            .font(.body)
+//                            .padding(5)
+//                            .frame(maxWidth: .infinity, alignment: .leading)
+//                            .background(
+//                                index == currentUtteranceIndex ?
+//                                colorForCharacter(entry.character).opacity(0.7) :
+//                                colorForCharacter(entry.character).opacity(0.2)
+//                            )
+//                            .cornerRadius(5)
+//                    } else {
+//                        Text("It's your line! Press to continue.")
+//                            .font(.body)
+//                            .padding(5)
+//                            .frame(maxWidth: .infinity, alignment: .leading)
+//                            .background(
+//                                index == currentUtteranceIndex ?
+//                                colorForCharacter(entry.character).opacity(0.7) :
+//                                colorForCharacter(entry.character).opacity(0.2)
+//                            )
+//                            .cornerRadius(5)
+//                    }
 //                } else {
-//                    Text("It's your line! Press to continue.")
+//                    // This is a non-selected character - check if THIS character has gray or custom color
+//                    let characterColor = colorForCharacter(entry.character)
+//                    let isThisCharacterGray = isColorGray(characterColor)
+//                    
+//                    Text(entry.line)
 //                        .font(.body)
 //                        .padding(5)
-//                        .frame(maxWidth: .infinity, alignment: .leading)
 //                        .background(
-//                            index == currentUtteranceIndex ? colorForCharacter(entry.character).opacity(0.7) : Color.clear
+//                            index == currentUtteranceIndex ?
+//                            characterColor.opacity(0.7) :
+//                            (isThisCharacterGray ? Color.clear : characterColor.opacity(0.2))
 //                        )
 //                        .cornerRadius(5)
 //                }
+//            }
+//            .padding(.bottom, 5)
+//            .id(index)
+//        }
+//
+//        // MARK: - Helper function to check if a color is gray
+//        private func isColorGray(_ color: Color) -> Bool {
+//            let defaultDarkGray = Color.gray.opacity(0.3)
+//            let defaultLightGray = Color.gray.opacity(0.15)
+//            
+//            return colorsAreEqual(color, defaultDarkGray) || colorsAreEqual(color, defaultLightGray)
+//        }
+//    
+//    // Helper function to check if user has customized any colors
+//        private func hasUserCustomizedAnyColors() -> Bool {
+//            // Check if any character has a color different from the default gray colors
+//            for (_, options) in characterOptions {
+//                let characterColor = options.highlight.swiftUIColor
+//                
+//                // Check if the color is different from default gray colors
+//                let defaultDarkGray = Color.gray.opacity(0.3)
+//                let defaultLightGray = Color.gray.opacity(0.15)
+//                
+//                // If the color is not one of the default grays, user has customized
+//                if !colorsAreEqual(characterColor, defaultDarkGray) &&
+//                   !colorsAreEqual(characterColor, defaultLightGray) {
+//                    return true
+//                }
+//            }
+//            return false
+//        }
+//
+//        // Helper function to compare colors
+//        private func colorsAreEqual(_ color1: Color, _ color2: Color) -> Bool {
+//            // Convert colors to UIColor for comparison
+//            let uiColor1 = UIColor(color1)
+//            let uiColor2 = UIColor(color2)
+//            
+//            var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+//            var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+//            
+//            uiColor1.getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+//            uiColor2.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+//            
+//            // Compare with small tolerance for floating point precision
+//            let tolerance: CGFloat = 0.01
+//            return abs(r1 - r2) < tolerance &&
+//                   abs(g1 - g2) < tolerance &&
+//                   abs(b1 - b2) < tolerance &&
+//                   abs(a1 - a2) < tolerance
+//        }
+//    
+//    // MARK: - Updated ensureCharacterOptions function
+//    /// Makes sure every character has a default entry in `characterOptions`
+//    private func ensureCharacterOptions() {
+//            // Determine the appropriate gray color based on color scheme
+//            let defaultGrayColor: Color
+//            if colorScheme == .dark {
+//                // Dark mode: use darker gray
+//                defaultGrayColor = Color.gray.opacity(0.3)
 //            } else {
-//                Text(entry.line)
-//                    .font(.body)
-//                    .padding(5)
-//                    .background(
-//                        index == currentUtteranceIndex ? Color.yellow.opacity(0.7) : Color.clear
-//                    )
-//                    .cornerRadius(5)
+//                // Light mode: use lighter gray
+//                defaultGrayColor = Color.gray.opacity(0.15)
+//            }
+//            
+//            // Just create basic options, colors will be set by updateHighlightColors
+//            for name in characters where characterOptions[name] == nil {
+//                characterOptions[name] = CharacterOptions(
+//                    voiceID: AVSpeechSynthesisVoice.currentLanguageCode(),
+//                    highlight: SerializableColor(defaultGrayColor)
+//                )
 //            }
 //        }
-//        .padding(.bottom, 5)
-//        .id(index)
-//    }
 //
+//    // MARK: - Update highlight colors when selection changes
+//    private func updateHighlightColors() {
+//            // Carefully selected colors that are visually very distinct from each other
+//            let allColors: [Color] = [
+//                Color.red,                                    // Bright red
+//                Color.blue,                                   // Bright blue
+//                Color.green,                                  // Bright green
+//                Color.yellow,                                 // Bright yellow
+//                Color.purple,                                 // Bright purple
+//                Color.orange,                                 // Bright orange
+//                Color.pink,                                   // Bright pink
+//                Color.cyan,                                   // Bright cyan
+//                Color.brown,                                  // Brown
+//                Color.gray,                                   // Gray
+//                Color(red: 0.0, green: 0.0, blue: 0.0),     // Black
+//                Color(red: 1.0, green: 0.0, blue: 1.0),     // Magenta
+//                Color(red: 0.5, green: 0.0, blue: 0.5),     // Dark purple
+//                Color(red: 0.0, green: 0.5, blue: 0.0),     // Dark green
+//                Color(red: 0.5, green: 0.5, blue: 0.0),     // Olive
+//                Color(red: 0.0, green: 0.5, blue: 0.5),     // Teal
+//                Color(red: 0.5, green: 0.0, blue: 0.0),     // Dark red
+//                Color(red: 0.0, green: 0.0, blue: 0.5),     // Navy blue
+//                Color(red: 1.0, green: 0.5, blue: 0.0),     // Orange-red
+//                Color(red: 0.5, green: 1.0, blue: 0.0),     // Lime green
+//                Color(red: 0.0, green: 1.0, blue: 0.5),     // Spring green
+//                Color(red: 0.5, green: 0.0, blue: 1.0),     // Blue-violet
+//                Color(red: 1.0, green: 0.0, blue: 0.5),     // Rose
+//                Color(red: 0.0, green: 0.5, blue: 1.0)      // Sky blue
+//            ]
+//            
+//            // Get only the selected characters in a consistent order
+//            let selectedCharactersList = characters.filter { character in
+//                selectedCharacters.contains(where: { $0.caseInsensitiveCompare(character) == .orderedSame })
+//            }
+//            
+//            // Determine the appropriate gray color based on color scheme
+//            let nonSelectedGrayColor: Color
+//            if colorScheme == .dark {
+//                // Dark mode: use darker gray
+//                nonSelectedGrayColor = Color.gray.opacity(0.3)
+//            } else {
+//                // Light mode: use lighter gray
+//                nonSelectedGrayColor = Color.gray.opacity(0.15)
+//            }
+//            
+//            // First, set all characters to appropriate gray
+//            for name in characters {
+//                if characterOptions[name] == nil {
+//                    characterOptions[name] = CharacterOptions(
+//                        voiceID: AVSpeechSynthesisVoice.currentLanguageCode(),
+//                        highlight: SerializableColor(nonSelectedGrayColor)
+//                    )
+//                } else {
+//                    characterOptions[name]?.highlight = SerializableColor(nonSelectedGrayColor)
+//                }
+//            }
+//            
+//            // Then assign unique colors to selected characters only
+//            for (index, name) in selectedCharactersList.enumerated() {
+//                let colorIndex = index % allColors.count
+//                characterOptions[name]?.highlight = SerializableColor(allColors[colorIndex])
+//            }
+//        }
+//
+//    
 //    // MARK: - Script Conversion Function
 //    func convertScriptToCorrectFormat(from text: String) -> String {
 //        let lines = text.components(separatedBy: .newlines)
@@ -958,6 +1174,8 @@
 //
 //            let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
 //            self.characters = extractedCharacters
+//            ensureCharacterOptions()
+//            updateHighlightColors() // Set initial colors
 //
 //            print("✅ Characters Loaded: \(characters)")
 //
@@ -988,7 +1206,8 @@
 //
 //        return extractedDialogue
 //    }
-//
+//    
+//    
 //    // MARK: - Speech Functions
 //    func initializeSpeech() {
 //        currentUtteranceIndex = 0
@@ -1010,7 +1229,7 @@
 //        let entry = dialogue[currentUtteranceIndex]
 //        if selectedCharacters.contains("Not Applicable") {
 //            isUserLine = false
-//            speakLine(entry.line)
+//            speakLine(entry.line, for: entry.character)
 //        } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
 //            if displayMyLines {
 //                isUserLine = true
@@ -1019,7 +1238,7 @@
 //            }
 //        } else {
 //            isUserLine = false
-//            speakLine(entry.line)
+//            speakLine(entry.line, for: entry.character)
 //        }
 //    }
 //
@@ -1029,9 +1248,15 @@
 //        startNextLine()
 //    }
 //
-//    private func speakLine(_ text: String) {
+//    /// Speaks the line using the chosen voice for its character
+//    private func speakLine(_ text: String, for character: String) {
 //        let utterance = AVSpeechUtterance(string: text)
-//        utterance.voice = AVSpeechSynthesisVoice(language: "en-US")
+//
+//        // Apply the user-picked voice if one is set
+//        if let id = characterOptions[character]?.voiceID,
+//           let voice = AVSpeechSynthesisVoice(identifier: id) {
+//            utterance.voice = voice
+//        }
 //        utterance.postUtteranceDelay = 0.5
 //
 //        let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
@@ -1041,7 +1266,6 @@
 //        }
 //        speechDelegate = delegate
 //        synthesizer.delegate = delegate
-//
 //        synthesizer.speak(utterance)
 //    }
 //    
@@ -1089,12 +1313,7 @@
 //    }
 //
 //    func colorForCharacter(_ character: String) -> Color {
-//        let colors: [Color] = [.orange, .blue, .pink, .purple, .red, .teal]
-//        let sortedSelections = selectedCharacters.sorted()
-//        if let index = sortedSelections.firstIndex(of: character) {
-//            return colors[index % colors.count]
-//        }
-//        return Color.gray
+//        characterOptions[character]?.highlight.swiftUIColor ?? .gray
 //    }
 //    
 //    // MARK: - Library Integration Functions
@@ -1132,6 +1351,7 @@
 //        let convertedScript = convertScriptToCorrectFormat(from: fileContent)
 //        dialogue = extractDialogue(from: convertedScript)
 //        characters = Array(Set(dialogue.map { $0.character })).sorted()
+//        ensureCharacterOptions()
 //        
 //        // Load settings
 //        selectedCharacters = Set(script.settings.selectedCharacters)
@@ -1156,6 +1376,11 @@
 //    }
 //}
 //
+///// Holds the per-character voice & highlight that the user chooses
+//struct CharacterOptions: Codable {
+//    var voiceID: String
+//    var highlight: SerializableColor      // instead of Color
+//}
 //// MARK: - AVSpeechSynthesizerDelegateWrapper
 //class AVSpeechSynthesizerDelegateWrapper: NSObject, AVSpeechSynthesizerDelegate {
 //    private let completion: () -> Void

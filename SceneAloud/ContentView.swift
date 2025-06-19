@@ -14,6 +14,15 @@ enum ScriptInputType: String, CaseIterable, Identifiable {
     var id: String { self.rawValue }
 }
 
+enum VoiceGender: String, CaseIterable, Identifiable {
+    case male = "Male"
+    case female = "Female"
+    case androgynous = "Androgynous"
+    
+    var id: String { self.rawValue }
+}
+
+
 struct SerializableColor: Codable {
     var r, g, b, a: Double          // 0…1 range
 
@@ -52,6 +61,10 @@ struct ContentView: View {
     @State private var displayMyLines: Bool = false
     @State private var isShowingCharacterCustomization: Bool = false
     @State private var characterOptions: [String: CharacterOptions] = [:]
+    
+    @State private var showVoiceDuplicateWarning: Bool = false
+    @State private var pendingVoiceSelection: (characterName: String, voiceID: String)? = nil
+
 
 
     // Unified alert enum
@@ -341,6 +354,7 @@ struct ContentView: View {
             let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
             self.characters = extractedCharacters
             ensureCharacterOptions()
+            updateHighlightColors() // Set initial colors
             self.uploadedFileName = "Typed Script"
             self.hasPressedContinue = false
             self.hasUploadedFile = true
@@ -512,87 +526,87 @@ struct ContentView: View {
     // MARK: - Settings View
     @ViewBuilder
     private var settingsView: some View {
-        HamburgerOverlay(showSideMenu: $isLibraryOpen) {
-            ZStack(alignment: .topLeading) {
-                VStack(spacing: 0) {
-                    VStack(alignment: .leading) {
-                        Text("Settings")
-                            .font(.largeTitle)
-                            .bold()
+            HamburgerOverlay(showSideMenu: $isLibraryOpen) {
+                ZStack(alignment: .topLeading) {
+                    VStack(spacing: 0) {
+                        VStack(alignment: .leading) {
+                            // Removed the large bold "Settings" title
+                            // Now only uses the navigation title at the top
+                            
+                            Text("Select your characters")
+                                .font(.title2)
+                                .padding(.vertical, 5)
 
-                        Text("Select your characters")
-                            .font(.title2)
-                            .padding(.vertical, 5)
+                            characterSelectionSection
 
-                        characterSelectionSection
+                            displaySettingsSection
 
-                        displaySettingsSection
+                            Spacer()
 
-                        Spacer()
-
-                        Button(action: {
-                            if selectedCharacters.isEmpty {
-                                activeAlert = .noCharacterSelected
-                            } else {
-                                isShowingCharacterCustomization = true
-                                print("✅ Characters Selected: \(selectedCharacters)")
+                            Button(action: {
+                                if selectedCharacters.isEmpty {
+                                    activeAlert = .noCharacterSelected
+                                } else {
+                                    updateHighlightColors() // Update colors before going to customization
+                                    isShowingCharacterCustomization = true
+                                    
+                                }
+                            }) {
+                                Text("Continue")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.blue)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
                             }
-                        }) {
-                            Text("Continue")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.blue)
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
+                            .padding(.bottom, 10)
+                            
+                            // Save Script Button
+                            Button(action: {
+                                saveCurrentScript()
+                            }) {
+                                Text("Save Script")
+                                    .font(.headline)
+                                    .frame(maxWidth: .infinity)
+                                    .padding()
+                                    .background(Color.green)
+                                    .foregroundColor(.white)
+                                    .cornerRadius(10)
+                            }
+                            .padding(.bottom, 20)
                         }
-                        .padding(.bottom, 10)
-                        
-                        // Save Script Button
+                        .padding(.horizontal, 20)
+                        .padding(.top, 10) // Adjusted top padding since we removed the large title
+                    }
+                }
+                .alert(item: $activeAlert) { alert in
+                    alertForType(alert)
+                }
+                .frame(maxHeight: .infinity, alignment: .top)
+                .navigationTitle("Settings") // This creates the small title at the top
+                .navigationBarTitleDisplayMode(.inline) // Ensures small title format
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
                         Button(action: {
-                            saveCurrentScript()
+                            hasPressedContinue = false
                         }) {
-                            Text("Save Script")
-                                .font(.headline)
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(Color.green)
-                                .foregroundColor(.white)
-                                .cornerRadius(10)
-                        }
-                        .padding(.bottom, 20)
-                    }
-                    .padding(.horizontal, 20)
-                    .padding(.top, -8)
-                }
-            }
-            .alert(item: $activeAlert) { alert in
-                alertForType(alert)
-            }
-            .frame(maxHeight: .infinity, alignment: .top)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        hasPressedContinue = false
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.left")
-                            Text("Back")
+                            HStack {
+                                Image(systemName: "arrow.left")
+                                Text("Back")
+                            }
                         }
                     }
                 }
-                ToolbarItem(placement: .principal) {
-                    Text("Settings")
-                        .foregroundColor(colorScheme == .dark ? .black : .white)
-                }
-            }
-            .onChange(of: selectedCharacters) { _, newValue in
-                if newValue.contains("Not Applicable") {
-                    displayMyLines = false
+                .onChange(of: selectedCharacters) { _, newValue in
+                    if newValue.contains("Not Applicable") {
+                        displayMyLines = false
+                    }
+                    // Update highlight colors when character selection changes
+                    updateHighlightColors()
                 }
             }
         }
-    }
 
     // MARK: - Character Selection Section
     @ViewBuilder
@@ -673,112 +687,323 @@ struct ContentView: View {
         .padding(.vertical, 2)
     }
     
-    // MARK: - Character Customization View
+    // MARK: - Character Customization List
+    @ViewBuilder
+    private var characterCustomizationList: some View {
+        List {
+            ForEach(characters, id: \.self) { name in
+                Section(header: Text(name.capitalized)) {
+                    characterVoiceSection(for: name)
+                    characterHighlightSection(for: name)
+                }
+            }
+        }
+        .listStyle(.insetGrouped)
+    }
+
+    // MARK: - Character Voice Section
+    @ViewBuilder
+    private func characterVoiceSection(for name: String) -> some View {
+        let isCharacterSelected = selectedCharacters.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame })
+        
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Text("Voice")
+                    .font(.headline)
+                
+                if isCharacterSelected {
+                    Text("(You're playing this character)")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                        .italic()
+                }
+            }
+            
+            if isCharacterSelected {
+                disabledVoiceInfo
+            } else {
+                activeVoiceControls(for: name)
+            }
+        }
+        .padding(.vertical, 4)
+    }
+
+    // MARK: - Disabled Voice Info
+    @ViewBuilder
+    private var disabledVoiceInfo: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("Voice selection disabled")
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+            
+            Text("Since you're playing this character, you'll be reading the lines yourself.")
+                .font(.caption)
+                .foregroundColor(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 12)
+        .background(Color(UIColor.secondarySystemBackground))
+        .cornerRadius(8)
+    }
+
+    // MARK: - Active Voice Controls
+    @ViewBuilder
+    private func activeVoiceControls(for name: String) -> some View {
+        VStack(spacing: 12) {
+            genderPicker(for: name)
+            specificVoicePicker(for: name)
+            voicePreviewButton(for: name)
+        }
+    }
+
+    // MARK: - Gender Picker
+    @ViewBuilder
+    private func genderPicker(for name: String) -> some View {
+        Picker("Voice Gender", selection: Binding(
+            get: { getSelectedVoiceGender(for: name) },
+            set: { newGender in
+                handleGenderChange(for: name, newGender: newGender)
+            }
+        )) {
+            ForEach(VoiceGender.allCases) { gender in
+                Text(gender.rawValue).tag(gender)
+            }
+        }
+        .pickerStyle(SegmentedPickerStyle())
+    }
+
+    // MARK: - Specific Voice Picker
+    @ViewBuilder
+    private func specificVoicePicker(for name: String) -> some View {
+        Picker("Specific Voice", selection: Binding(
+            get: { characterOptions[name]?.voiceID ?? "" },
+            set: { newVoiceID in
+                handleVoiceChange(for: name, newVoiceID: newVoiceID)
+            }
+        )) {
+            let selectedGender = getSelectedVoiceGender(for: name)
+            ForEach(getVoicesForGender(selectedGender), id: \.identifier) { voice in
+                Text("\(voice.name) (\(voice.language))").tag(voice.identifier)
+            }
+        }
+        .pickerStyle(MenuPickerStyle())
+    }
+
+    // MARK: - Voice Preview Button
+    @ViewBuilder
+    private func voicePreviewButton(for name: String) -> some View {
+        Button(action: {
+            if let voiceID = characterOptions[name]?.voiceID {
+                previewVoice(voiceID: voiceID)
+            }
+        }) {
+            HStack {
+                Image(systemName: "speaker.wave.2.fill")
+                Text("Preview Voice")
+            }
+            .font(.caption)
+            .foregroundColor(.blue)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+
+    // MARK: - Character Highlight Section
+    @ViewBuilder
+    private func characterHighlightSection(for name: String) -> some View {
+        ColorPicker("Highlight Color", selection: Binding(
+            get: { characterOptions[name]?.highlight.swiftUIColor ?? .yellow },
+            set: { newColor in
+                characterOptions[name]?.highlight = SerializableColor(newColor)
+            }
+        ))
+    }
+
+    // MARK: - Voice Change Handlers
+    private func handleGenderChange(for name: String, newGender: VoiceGender) {
+        let voicesForGender = getVoicesForGender(newGender)
+        
+        if let firstVoice = voicesForGender.first {
+            let charactersUsingVoice = findCharactersUsingVoice(firstVoice.identifier, excluding: name)
+            
+            if !charactersUsingVoice.isEmpty {
+                pendingVoiceSelection = (characterName: name, voiceID: firstVoice.identifier)
+                showVoiceDuplicateWarning = true
+            } else {
+                characterOptions[name]?.voiceID = firstVoice.identifier
+            }
+        }
+    }
+
+    private func handleVoiceChange(for name: String, newVoiceID: String) {
+        let charactersUsingVoice = findCharactersUsingVoice(newVoiceID, excluding: name)
+        
+        if !charactersUsingVoice.isEmpty {
+            pendingVoiceSelection = (characterName: name, voiceID: newVoiceID)
+            showVoiceDuplicateWarning = true
+        } else {
+            characterOptions[name]?.voiceID = newVoiceID
+            previewVoice(voiceID: newVoiceID)
+        }
+    }
+
+    // MARK: - Voice Duplicate Alert Components
+    @ViewBuilder
+    private var voiceDuplicateAlertButtons: some View {
+        Button("Cancel") {
+            pendingVoiceSelection = nil
+        }
+        Button("Continue Anyway") {
+            if let pending = pendingVoiceSelection {
+                characterOptions[pending.characterName]?.voiceID = pending.voiceID
+                previewVoice(voiceID: pending.voiceID)
+            }
+            pendingVoiceSelection = nil
+        }
+    }
+
+    @ViewBuilder
+    private var voiceDuplicateAlertMessage: some View {
+        if let pending = pendingVoiceSelection {
+            let charactersUsingVoice = findCharactersUsingVoice(pending.voiceID, excluding: pending.characterName)
+            
+            if charactersUsingVoice.count == 1 {
+                Text("This voice is already being used for \(charactersUsingVoice[0].capitalized). Do you want to use the same voice for both characters?")
+            } else if charactersUsingVoice.count > 1 {
+                let characterNames = charactersUsingVoice.map { $0.capitalized }
+                let formattedNames = formatCharacterNames(characterNames)
+                Text("This voice is already being used for \(formattedNames). Do you want to use the same voice for all these characters?")
+            }
+        }
+    }
+
+    
+    // MARK: - Character Customization View - Fixed by breaking into smaller components
     @ViewBuilder
     private var characterCustomizationView: some View {
         HamburgerOverlay(showSideMenu: $isLibraryOpen) {
             VStack {
-                List {
-                    ForEach(characters, id: \.self) { name in
-                        Section(header: Text(name.capitalized)) {
-
-                            // Voice picker
-                            Picker("Voice", selection: Binding(
-                                get: { characterOptions[name]?.voiceID ?? "" },
-                                set: { characterOptions[name]?.voiceID = $0 }
-                            )) {
-                                ForEach(AVSpeechSynthesisVoice.speechVoices(), id: \.identifier) { v in
-                                    Text("\(v.name) (\(v.language))").tag(v.identifier)
-                                }
-                            }
-
-                            // Highlight picker
-                            ColorPicker("Highlight Color", selection: Binding(
-                                get: { characterOptions[name]?.highlight.swiftUIColor ?? .yellow },
-                                set: { newColor in
-                                    characterOptions[name]?.highlight = SerializableColor(newColor)
-                                }
-                            ))
-                        }
-                    }
-                }
-                .listStyle(.insetGrouped)
-
-                Button("Continue") {
-                    isCharacterSelected = true
-                }
-                .font(.headline)
-                .frame(maxWidth: .infinity)
-                .padding()
-                .background(Color.blue)
-                .foregroundColor(.white)
-                .cornerRadius(10)
-                .padding([.horizontal, .bottom], 20)
+                characterCustomizationList
+                characterCustomizationButtonSection
             }
             .navigationTitle("Character Customization")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarLeading) {
-                    Button { isShowingCharacterCustomization = false } label: {
+                    Button {
+                        pauseSpeechForNavigation()
+                        stopVoicePreview()
+                        isShowingCharacterCustomization = false
+                    } label: {
                         Label("Back", systemImage: "arrow.left")
                     }
                 }
             }
+            .onAppear {
+                ensureCharacterOptions()
+                updateHighlightColors()
+            }
+            .onDisappear {
+                stopVoicePreview()
+            }
+            .alert("Voice Already In Use", isPresented: $showVoiceDuplicateWarning) {
+                voiceDuplicateAlertButtons
+            } message: {
+                voiceDuplicateAlertMessage
+            }
         }
     }
+
+    
+    // MARK: - Character Customization Button Section
+    @ViewBuilder
+    private var characterCustomizationButtonSection: some View {
+        VStack {
+            Button(action: {
+                isCharacterSelected = true
+            }) {
+                Text("Continue")
+                    .font(.headline)
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(Color.blue)
+                    .foregroundColor(.white)
+                    .cornerRadius(10)
+            }
+            .padding(.horizontal, 20)
+            .padding(.bottom, 20)
+            .padding(.top, 10)
+        }
+    }
+
+
+
     
     
     // MARK: - Script Reading View
     @ViewBuilder
     private var scriptReadingView: some View {
-        HamburgerOverlay(showSideMenu: $isLibraryOpen) {
-            VStack {
-                ScrollViewReader { proxy in
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 10) {
-                            ForEach(dialogue.indices, id: \.self) { index in
-                                let entry = dialogue[index]
+            HamburgerOverlay(showSideMenu: $isLibraryOpen) {
+                VStack {
+                    ScrollViewReader { proxy in
+                        ScrollView {
+                            VStack(alignment: .leading, spacing: 10) {
+                                ForEach(dialogue.indices, id: \.self) { index in
+                                    let entry = dialogue[index]
 
-                                if displayLinesAsRead {
-                                    if index <= currentUtteranceIndex {
+                                    if displayLinesAsRead {
+                                        if index <= currentUtteranceIndex {
+                                            lineView(for: entry, at: index)
+                                        }
+                                    } else {
                                         lineView(for: entry, at: index)
                                     }
-                                } else {
-                                    lineView(for: entry, at: index)
+                                }
+                            }
+                            .padding()
+                            .onChange(of: currentUtteranceIndex) { _ in
+                                withAnimation {
+                                    proxy.scrollTo(currentUtteranceIndex, anchor: .top)
                                 }
                             }
                         }
-                        .padding()
-                        .onChange(of: currentUtteranceIndex) { _ in
-                            withAnimation {
-                                proxy.scrollTo(currentUtteranceIndex, anchor: .top)
+                        .background(Color(UIColor.systemBackground))
+                    }
+                    .background(Color(UIColor.systemBackground))
+
+                    controlButtonsSection
+                }
+                .navigationTitle("SceneAloud")
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .navigationBarLeading) {
+                        Button(action: {
+                            // Auto-pause speech when going back
+                            pauseSpeechForNavigation()
+                            // Go back to character customization
+                            isCharacterSelected = false
+                        }) {
+                            HStack {
+                                Image(systemName: "arrow.left")
+                                Text("Back")
                             }
                         }
                     }
-                    .background(Color(UIColor.systemBackground))
                 }
-                .background(Color(UIColor.systemBackground))
-
-                controlButtonsSection
-            }
-            .navigationTitle("SceneAloud")
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(action: {
-                        // Go back to character customization instead of restarting script
-                        isCharacterSelected = false
-                    }) {
-                        HStack {
-                            Image(systemName: "arrow.left")
-                            Text("Back")
-                        }
-                    }
+                .onAppear(perform: initializeSpeech)
+                .onDisappear {
+                    // Auto-pause when view disappears for any reason
+                    pauseSpeechForNavigation()
                 }
             }
-            .onAppear(perform: initializeSpeech)
         }
-    }
+    
+    private func pauseSpeechForNavigation() {
+            if synthesizer.isSpeaking {
+                synthesizer.pauseSpeaking(at: .immediate)
+                isPaused = true
+            }
+        }
 
     // MARK: - Control Buttons Section
     @ViewBuilder
@@ -852,65 +1077,490 @@ struct ContentView: View {
     }
 
     // MARK: - Line View
-    @ViewBuilder
-    private func lineView(for entry: (character: String, line: String), at index: Int) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(entry.character)
-                .font(.headline)
-                .foregroundColor(.primary)
+        @ViewBuilder
+        private func lineView(for entry: (character: String, line: String), at index: Int) -> some View {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(entry.character)
+                    .font(.headline)
+                    .foregroundColor(.primary)
 
-            if selectedCharacters.contains("Not Applicable") {
-                Text(entry.line)
-                    .font(.body)
-                    .padding(5)
-                    .background(
-                        index == currentUtteranceIndex ? Color.yellow.opacity(0.7) : Color.clear
-                    )
-                    .cornerRadius(5)
-            } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
-                if displayMyLines {
+                if selectedCharacters.contains("Not Applicable") {
+                    // When "Not Applicable" is selected, check THIS character's color individually
+                    let characterColor = colorForCharacter(entry.character)
+                    let isThisCharacterGray = isColorGray(characterColor)
+                    
                     Text(entry.line)
                         .font(.body)
                         .padding(5)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
-                            index == currentUtteranceIndex ? colorForCharacter(entry.character).opacity(0.7) : Color.clear
+                            isThisCharacterGray ?
+                            // If THIS character has gray color, only highlight current line
+                            (index == currentUtteranceIndex ?
+                             characterColor.opacity(0.7) :
+                             Color.clear
+                            ) :
+                            // If THIS character has custom color, show persistently
+                            (index == currentUtteranceIndex ?
+                             characterColor.opacity(0.7) :
+                             characterColor.opacity(0.2)
+                            )
                         )
                         .cornerRadius(5)
+                } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
+                    // This is a user-selected character - always show background, bright when current
+                    if displayMyLines {
+                        Text(entry.line)
+                            .font(.body)
+                            .padding(5)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                index == currentUtteranceIndex ?
+                                colorForCharacter(entry.character).opacity(0.7) :
+                                colorForCharacter(entry.character).opacity(0.2)
+                            )
+                            .cornerRadius(5)
+                    } else {
+                        Text("It's your line! Press to continue.")
+                            .font(.body)
+                            .padding(5)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .background(
+                                index == currentUtteranceIndex ?
+                                colorForCharacter(entry.character).opacity(0.7) :
+                                colorForCharacter(entry.character).opacity(0.2)
+                            )
+                            .cornerRadius(5)
+                    }
                 } else {
-                    Text("It's your line! Press to continue.")
+                    // This is a non-selected character - check if THIS character has gray or custom color
+                    let characterColor = colorForCharacter(entry.character)
+                    let isThisCharacterGray = isColorGray(characterColor)
+                    
+                    Text(entry.line)
                         .font(.body)
                         .padding(5)
-                        .frame(maxWidth: .infinity, alignment: .leading)
                         .background(
-                            index == currentUtteranceIndex ? colorForCharacter(entry.character).opacity(0.7) : Color.clear
+                            index == currentUtteranceIndex ?
+                            characterColor.opacity(0.7) :
+                            (isThisCharacterGray ? Color.clear : characterColor.opacity(0.2))
                         )
                         .cornerRadius(5)
                 }
-            } else {
-                Text(entry.line)
-                    .font(.body)
-                    .padding(5)
-                    .background(
-                        index == currentUtteranceIndex ? Color.yellow.opacity(0.7) : Color.clear
-                    )
-                    .cornerRadius(5)
+            }
+            .padding(.bottom, 5)
+            .id(index)
+        }
+    
+    // MARK: - Voice Preview Functionality
+    @State private var previewSynthesizer = AVSpeechSynthesizer()
+
+    private func previewVoice(voiceID: String) {
+        // Stop any currently playing preview
+        stopVoicePreview()
+        
+        // Create utterance with "Hello"
+        let utterance = AVSpeechUtterance(string: "Hello")
+        
+        // Set the voice
+        if let voice = AVSpeechSynthesisVoice(identifier: voiceID) {
+            utterance.voice = voice
+        }
+        
+        // Configure for quick preview
+        utterance.rate = AVSpeechUtteranceDefaultSpeechRate
+        utterance.volume = 0.8
+        utterance.pitchMultiplier = 1.0
+        
+        // Speak the preview
+        previewSynthesizer.speak(utterance)
+    }
+
+    private func stopVoicePreview() {
+        if previewSynthesizer.isSpeaking {
+            previewSynthesizer.stopSpeaking(at: .immediate)
+        }
+    }
+    // MARK: - Helper function to get currently used voice IDs
+    private func getCurrentlyUsedVoiceIDs(excluding excludeName: String) -> Set<String> {
+        var usedIDs: Set<String> = []
+        for (name, options) in characterOptions {
+            if name != excludeName {
+                usedIDs.insert(options.voiceID)
             }
         }
-        .padding(.bottom, 5)
-        .id(index)
+        return usedIDs
     }
-    /// Makes sure every character has a default entry in `characterOptions`
-    private func ensureCharacterOptions() {
-        let fallback: [Color] = [.orange, .blue, .pink, .purple, .red, .teal]
-
-        for (idx, name) in characters.enumerated() where characterOptions[name] == nil {
-            characterOptions[name] = CharacterOptions(
-                voiceID: AVSpeechSynthesisVoice.currentLanguageCode(),
-                highlight: SerializableColor(fallback[idx % fallback.count])
-            )
+    
+    // MARK: - Voice Management System
+    private func assignUniqueVoices() {
+        // Get all available voices from our curated lists
+        let allCuratedVoices = getVoicesForGender(.male) + getVoicesForGender(.female) + getVoicesForGender(.androgynous)
+        
+        var voiceIndex = 0
+        
+        // Assign voices to characters that don't have them yet
+        for name in characters {
+            if let currentVoiceID = characterOptions[name]?.voiceID,
+               !currentVoiceID.isEmpty,
+               AVSpeechSynthesisVoice(identifier: currentVoiceID) != nil {
+                // Character already has a valid voice, keep it (even if duplicate)
+                continue
+            } else {
+                // Character needs a new voice - assign next available from curated list
+                while voiceIndex < allCuratedVoices.count {
+                    let voice = allCuratedVoices[voiceIndex]
+                    voiceIndex += 1
+                    
+                    characterOptions[name]?.voiceID = voice.identifier
+                    break
+                }
+                
+                // Final fallback if we somehow run out of curated voices
+                if let currentVoiceID = characterOptions[name]?.voiceID, currentVoiceID.isEmpty {
+                    let fallbackVoice = getDefaultVoiceID()
+                    characterOptions[name]?.voiceID = fallbackVoice
+                }
+            }
         }
     }
+
+    private func reassignVoiceIfDuplicate(newVoiceID: String, forCharacter characterName: String) {
+        // Check if any other character is using this voice
+        for (otherName, options) in characterOptions {
+            if otherName != characterName && options.voiceID == newVoiceID {
+                // Found a duplicate! Assign a new voice to the other character
+                assignNewUniqueVoice(to: otherName, avoiding: [newVoiceID])
+                break
+            }
+        }
+    }
+
+    private func assignNewUniqueVoice(to characterName: String, avoiding avoidVoiceIDs: [String]) {
+        let allVoices = AVSpeechSynthesisVoice.speechVoices()
+        
+        // Get all currently used voice IDs
+        var usedVoiceIDs = Set(avoidVoiceIDs)
+        for (otherName, options) in characterOptions {
+            if otherName != characterName {
+                usedVoiceIDs.insert(options.voiceID)
+            }
+        }
+        
+        // Find first available voice
+        for voice in allVoices {
+            if !usedVoiceIDs.contains(voice.identifier) {
+                characterOptions[characterName]?.voiceID = voice.identifier
+                return
+            }
+        }
+        
+        // If no unique voice found (shouldn't happen), use default
+        characterOptions[characterName]?.voiceID = getDefaultVoiceID()
+    }
+    
+    // MARK: - Centralized Voice Lists
+    private var maleVoiceKeys: [String] {
+        return [
+            "rocko en-gb", "daniel en-gb", "arthur en-gb", "aaron en-us",
+            "daniel fr-fr", "reed en-gb", "fred en-us", "reed en-us",
+            "reed fi-fi", "reed fr-ca", "gordon en-au", "eddy en-gb",
+            "rishi en-in", "eddy en-us", "ralph en-us", "grandpa fi-fi",
+            "eddy fi-fi", "eddy fr-ca", "hattori ja-jp", "xander nl-nl",
+            "li-mu zh-cn", "eddy zh-tw"
+        ]
+    }
+
+    private var femaleVoiceKeys: [String] {
+        return [
+            "samantha en-us", "karen en-au", "anna de-de", "paulina es-mx",
+            "marie fr-fr", "luciana pt-br", "joana pt-pt", "helena de-de",
+            "daria bg-bg", "melina el-gr", "catherine en-au", "martha en-gb",
+            "grandma fi-fi", "shelley fi-fi", "amélie fr-ca", "flo fr-fr",
+            "damayanti id-id", "kyoko ja-jp", "o-ren ja-jp", "ellen nl-be",
+            "shelley pt-br", "alva sv-se", "kanya th-th", "meijia zh-tw",
+            "nicky en-us"
+        ]
+    }
+
+    private var androgynousVoiceKeys: [String] {
+        return [
+            "bahh en-us", "jester en-us", "organ en-us", "cellos en-us",
+            "zarvox en-us", "whisper en-us", "good news en-us", "bad news en-us",
+            "bubbles en-us", "superstar en-us", "bells en-us", "trinoids en-us",
+            "boing en-us", "wobble en-us"
+        ]
+    }
+
+
+    // MARK: - Voice Helper Functions
+    private func formatCharacterNames(_ names: [String]) -> String {
+        if names.count == 2 {
+            return "\(names[0]) and \(names[1])"
+        } else {
+            let allButLast = names.dropLast().joined(separator: ", ")
+            return "\(allButLast), and \(names.last!)"
+        }
+    }
+
+    // Find ALL characters using a specific voice
+    private func findCharactersUsingVoice(_ voiceID: String, excluding excludeName: String) -> [String] {
+        var charactersUsingVoice: [String] = []
+        for (characterName, options) in characterOptions {
+            if characterName != excludeName && options.voiceID == voiceID {
+                charactersUsingVoice.append(characterName)
+            }
+        }
+        return charactersUsingVoice
+    }
+    
+    private func findCharacterUsingVoice(_ voiceID: String, excluding excludeName: String) -> String? {
+        for (characterName, options) in characterOptions {
+            if characterName != excludeName && options.voiceID == voiceID {
+                return characterName
+            }
+        }
+        return nil
+    }
+    
+    private func getDefaultVoiceID() -> String {
+        // Try to get one of our curated voices as default, preferably English
+        let allVoices = AVSpeechSynthesisVoice.speechVoices()
+        
+        // Preferred default voices in order of preference
+        let preferredDefaults = [
+            "samantha en-us", "karen en-au", "aaron en-us", "daniel en-gb"
+        ]
+        
+        for preferredVoice in preferredDefaults {
+            if let voice = allVoices.first(where: { voice in
+                let voiceKey = "\(voice.name.lowercased()) \(voice.language.lowercased())"
+                return voiceKey == preferredVoice
+            }) {
+                return voice.identifier
+            }
+        }
+        
+        // Fallback to any curated voice
+        let curatedVoices = getVoicesForGender(.female) + getVoicesForGender(.male) + getVoicesForGender(.androgynous)
+        if let firstCurated = curatedVoices.first {
+            return firstCurated.identifier
+        }
+        
+        // Last resort - system default
+        if let systemDefault = AVSpeechSynthesisVoice(language: AVSpeechSynthesisVoice.currentLanguageCode()) {
+            return systemDefault.identifier
+        }
+        
+        // Absolute fallback
+        if let firstVoice = allVoices.first {
+            return firstVoice.identifier
+        }
+        
+        return ""
+    }
+    
+    private func getSelectedVoiceGender(for characterName: String) -> VoiceGender {
+        guard let voiceID = characterOptions[characterName]?.voiceID,
+              !voiceID.isEmpty,
+              let voice = AVSpeechSynthesisVoice(identifier: voiceID) else {
+            return .female // Default to female if no voice selected
+        }
+        
+        let voiceKey = "\(voice.name.lowercased()) \(voice.language.lowercased())"
+        
+        // Check which curated list contains this voice
+        if maleVoiceKeys.contains(voiceKey) {
+            return .male
+        } else if femaleVoiceKeys.contains(voiceKey) {
+            return .female
+        } else if androgynousVoiceKeys.contains(voiceKey) {
+            return .androgynous
+        }
+        
+        // Default to female if voice not found in curated lists
+        return .female
+    }
+    
+
+    private func getVoicesForGender(_ gender: VoiceGender) -> [AVSpeechSynthesisVoice] {
+        let allVoices = AVSpeechSynthesisVoice.speechVoices()
+        
+        // Get the appropriate voice list based on gender
+        var targetVoiceKeys: [String] = []
+        switch gender {
+        case .male:
+            targetVoiceKeys = maleVoiceKeys
+        case .female:
+            targetVoiceKeys = femaleVoiceKeys
+        case .androgynous:
+            targetVoiceKeys = androgynousVoiceKeys
+        }
+        
+        // Find matching voices from available system voices
+        var filteredVoices: [AVSpeechSynthesisVoice] = []
+        
+        for voiceKey in targetVoiceKeys {
+            if let matchingVoice = allVoices.first(where: { voice in
+                let systemVoiceKey = "\(voice.name.lowercased()) \(voice.language.lowercased())"
+                return systemVoiceKey == voiceKey
+            }) {
+                filteredVoices.append(matchingVoice)
+            }
+        }
+        
+        return filteredVoices
+    }
+    
+
+    // Helper function to get voice name for display
+    private func getVoiceDisplayName(for characterName: String) -> String {
+        guard let voiceID = characterOptions[characterName]?.voiceID,
+              !voiceID.isEmpty,
+              let voice = AVSpeechSynthesisVoice(identifier: voiceID) else {
+            return "No voice selected"
+        }
+        
+        return "\(voice.name) (\(voice.language))"
+    }
+        // MARK: - Highlight Helper functions
+        
+    private func isColorGray(_ color: Color) -> Bool {
+            let defaultDarkGray = Color.gray.opacity(0.3)
+            let defaultLightGray = Color.gray.opacity(0.15)
+            
+            return colorsAreEqual(color, defaultDarkGray) || colorsAreEqual(color, defaultLightGray)
+        }
+    
+    
+    // Helper function to check if user has customized any colors
+        private func hasUserCustomizedAnyColors() -> Bool {
+            // Check if any character has a color different from the default gray colors
+            for (_, options) in characterOptions {
+                let characterColor = options.highlight.swiftUIColor
+                
+                // Check if the color is different from default gray colors
+                let defaultDarkGray = Color.gray.opacity(0.3)
+                let defaultLightGray = Color.gray.opacity(0.15)
+                
+                // If the color is not one of the default grays, user has customized
+                if !colorsAreEqual(characterColor, defaultDarkGray) &&
+                   !colorsAreEqual(characterColor, defaultLightGray) {
+                    return true
+                }
+            }
+            return false
+        }
+
+        // Helper function to compare colors
+        private func colorsAreEqual(_ color1: Color, _ color2: Color) -> Bool {
+            // Convert colors to UIColor for comparison
+            let uiColor1 = UIColor(color1)
+            let uiColor2 = UIColor(color2)
+            
+            var r1: CGFloat = 0, g1: CGFloat = 0, b1: CGFloat = 0, a1: CGFloat = 0
+            var r2: CGFloat = 0, g2: CGFloat = 0, b2: CGFloat = 0, a2: CGFloat = 0
+            
+            uiColor1.getRed(&r1, green: &g1, blue: &b1, alpha: &a1)
+            uiColor2.getRed(&r2, green: &g2, blue: &b2, alpha: &a2)
+            
+            // Compare with small tolerance for floating point precision
+            let tolerance: CGFloat = 0.01
+            return abs(r1 - r2) < tolerance &&
+                   abs(g1 - g2) < tolerance &&
+                   abs(b1 - b2) < tolerance &&
+                   abs(a1 - a2) < tolerance
+        }
+    
+    // Updated ensureCharacterOptions function (UPDATED - Proper Voice Defaults)
+    /// Makes sure every character has a default entry in `characterOptions`
+    private func ensureCharacterOptions() {
+        // Determine the appropriate gray color based on color scheme
+        let defaultGrayColor: Color
+        if colorScheme == .dark {
+            // Dark mode: use darker gray
+            defaultGrayColor = Color.gray.opacity(0.3)
+        } else {
+            // Light mode: use lighter gray
+            defaultGrayColor = Color.gray.opacity(0.15)
+        }
+        
+        // Create basic options for characters that don't have them yet
+        for name in characters where characterOptions[name] == nil {
+            characterOptions[name] = CharacterOptions(
+                voiceID: "", // Will be assigned in assignUniqueVoices
+                highlight: SerializableColor(defaultGrayColor)
+            )
+        }
+        
+        // Assign unique voices to all characters
+        assignUniqueVoices()
+        
+    }
+
+    // MARK: - Update highlight colors when selection changes
+    private func updateHighlightColors() {
+            // Carefully selected colors that are visually very distinct from each other
+            let allColors: [Color] = [
+                Color.red,                                    // Bright red
+                Color.blue,                                   // Bright blue
+                Color.green,                                  // Bright green
+                Color.yellow,                                 // Bright yellow
+                Color.purple,                                 // Bright purple
+                Color.orange,                                 // Bright orange
+                Color.pink,                                   // Bright pink
+                Color.cyan,                                   // Bright cyan
+                Color.brown,                                  // Brown
+                Color.gray,                                   // Gray
+                Color(red: 0.0, green: 0.0, blue: 0.0),     // Black
+                Color(red: 1.0, green: 0.0, blue: 1.0),     // Magenta
+                Color(red: 0.5, green: 0.0, blue: 0.5),     // Dark purple
+                Color(red: 0.0, green: 0.5, blue: 0.0),     // Dark green
+                Color(red: 0.5, green: 0.5, blue: 0.0),     // Olive
+                Color(red: 0.0, green: 0.5, blue: 0.5),     // Teal
+                Color(red: 0.5, green: 0.0, blue: 0.0),     // Dark red
+                Color(red: 0.0, green: 0.0, blue: 0.5),     // Navy blue
+                Color(red: 1.0, green: 0.5, blue: 0.0),     // Orange-red
+                Color(red: 0.5, green: 1.0, blue: 0.0),     // Lime green
+                Color(red: 0.0, green: 1.0, blue: 0.5),     // Spring green
+                Color(red: 0.5, green: 0.0, blue: 1.0),     // Blue-violet
+                Color(red: 1.0, green: 0.0, blue: 0.5),     // Rose
+                Color(red: 0.0, green: 0.5, blue: 1.0)      // Sky blue
+            ]
+            
+            // Get only the selected characters in a consistent order
+            let selectedCharactersList = characters.filter { character in
+                selectedCharacters.contains(where: { $0.caseInsensitiveCompare(character) == .orderedSame })
+            }
+            
+            // Determine the appropriate gray color based on color scheme
+            let nonSelectedGrayColor: Color
+            if colorScheme == .dark {
+                // Dark mode: use darker gray
+                nonSelectedGrayColor = Color.gray.opacity(0.3)
+            } else {
+                // Light mode: use lighter gray
+                nonSelectedGrayColor = Color.gray.opacity(0.15)
+            }
+            
+            // First, set all characters to appropriate gray
+            for name in characters {
+                if characterOptions[name] == nil {
+                    characterOptions[name] = CharacterOptions(
+                        voiceID: AVSpeechSynthesisVoice.currentLanguageCode(),
+                        highlight: SerializableColor(nonSelectedGrayColor)
+                    )
+                } else {
+                    characterOptions[name]?.highlight = SerializableColor(nonSelectedGrayColor)
+                }
+            }
+            
+            // Then assign unique colors to selected characters only
+            for (index, name) in selectedCharactersList.enumerated() {
+                let colorIndex = index % allColors.count
+                characterOptions[name]?.highlight = SerializableColor(allColors[colorIndex])
+            }
+        }
+
     
     // MARK: - Script Conversion Function
     func convertScriptToCorrectFormat(from text: String) -> String {
@@ -990,8 +1640,9 @@ struct ContentView: View {
             let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
             self.characters = extractedCharacters
             ensureCharacterOptions()
+            updateHighlightColors() // Set initial colors
 
-            print("✅ Characters Loaded: \(characters)")
+            
 
             self.uploadedFileName = url.lastPathComponent
             self.hasUploadedFile = true
