@@ -17,7 +17,7 @@ enum ScriptInputType: String, CaseIterable, Identifiable {
 enum VoiceGender: String, CaseIterable, Identifiable {
     case male = "Male"
     case female = "Female"
-    case androgynous = "Androgynous"
+    case other = "Other"
     
     var id: String { self.rawValue }
 }
@@ -62,24 +62,40 @@ struct ContentView: View {
     @State private var isShowingCharacterCustomization: Bool = false
     @State private var characterOptions: [String: CharacterOptions] = [:]
     
+    @State private var showColorDuplicateWarning: Bool = false
+    @State private var pendingColorSelection: (characterName: String, color: Color)? = nil
     @State private var showVoiceDuplicateWarning: Bool = false
     @State private var pendingVoiceSelection: (characterName: String, voiceID: String)? = nil
+    
+    @State private var isShowingStartingLineSelection: Bool = false
+    @State private var selectedStartingLineIndex: Int? = nil
+    @State private var showLastLineWarning: Bool = false
+    @State private var hasSetStartingLine: Bool = false
+    @State private var startingLineIndex: Int = 0
+    
+    @State private var showHints: Bool = true
+    @State private var hintClickCount: Int = 0
+    @State private var currentHintLineIndex: Int = -1
+    @State private var revealedWords: [String] = []
 
 
-
-    // Unified alert enum
+    // Update your AlertType enum to include hintsInfo
     enum AlertType: Identifiable {
         case noCharacterSelected
-        case displayLinesInfo
+        case displayLinesAsReadInfo
         case notApplicableInfo
         case displayMyLinesInfo
+        case lastLineWarning
+        case hintsInfo // NEW
 
         var id: Int {
             switch self {
             case .noCharacterSelected: return 0
-            case .displayLinesInfo: return 1
+            case .displayLinesAsReadInfo: return 1
             case .notApplicableInfo: return 2
             case .displayMyLinesInfo: return 3
+            case .lastLineWarning: return 4
+            case .hintsInfo: return 5 // NEW
             }
         }
     }
@@ -235,7 +251,7 @@ struct ContentView: View {
         }
     }
 
-    // MARK: - Main Content View (Broken down)
+    // MARK: - Main Content View
     @ViewBuilder
     private var mainContentView: some View {
         if isShowingSplash {
@@ -250,9 +266,11 @@ struct ContentView: View {
             }
         } else if !isShowingCharacterCustomization {
             settingsView
-        } else if !isCharacterSelected {
+        } else if !isShowingStartingLineSelection {
             characterCustomizationView
-        }  else {
+        } else if !isCharacterSelected {
+            startingLineSelectionView
+        } else {
             scriptReadingView
         }
     }
@@ -601,9 +619,20 @@ struct ContentView: View {
                 .onChange(of: selectedCharacters) { _, newValue in
                     if newValue.contains("Not Applicable") {
                         displayMyLines = false
+                        showHints = false  // Turn off hints when "Not Applicable" is selected
                     }
                     // Update highlight colors when character selection changes
                     updateHighlightColors()
+                }
+                .onChange(of: displayMyLines) { _, newValue in
+                    if newValue {
+                        showHints = false  // Turn off hints when "Display My Lines" is turned on
+                    }
+                }
+                .onChange(of: showHints) { _, newValue in
+                    if newValue {
+                        displayMyLines = false  // Turn off "Display My Lines" when hints is turned on
+                    }
                 }
             }
         }
@@ -657,7 +686,7 @@ struct ContentView: View {
                 Text("Display lines as read")
                     .font(.title2)
                 Button(action: {
-                    activeAlert = .displayLinesInfo
+                    activeAlert = .displayLinesAsReadInfo
                 }) {
                     Image(systemName: "info.circle")
                         .foregroundColor(.blue)
@@ -684,6 +713,23 @@ struct ContentView: View {
                     .labelsHidden()
                     .disabled(selectedCharacters.contains("Not Applicable"))
             }
+        .padding(.vertical, 2)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("Hints")
+                    .font(.title2)
+                Button(action: {
+                    activeAlert = .hintsInfo
+                }) {
+                    Image(systemName: "info.circle")
+                        .foregroundColor(.blue)
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            Toggle("", isOn: $showHints)
+                .labelsHidden()
+                .disabled(selectedCharacters.contains("Not Applicable"))
+        }
         .padding(.vertical, 2)
     }
     
@@ -811,26 +857,86 @@ struct ContentView: View {
     // MARK: - Character Highlight Section
     @ViewBuilder
     private func characterHighlightSection(for name: String) -> some View {
-        ColorPicker("Highlight Color", selection: Binding(
-            get: { characterOptions[name]?.highlight.swiftUIColor ?? .yellow },
-            set: { newColor in
-                characterOptions[name]?.highlight = SerializableColor(newColor)
+        let isUserCharacter = selectedCharacters.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame })
+        let isNotApplicable = selectedCharacters.contains("Not Applicable")
+        
+        if isUserCharacter && !isNotApplicable {
+            // User is playing this character and not "Not Applicable" - allow color selection
+            ColorPicker("Highlight Color", selection: Binding(
+                get: { characterOptions[name]?.highlight.swiftUIColor ?? .yellow },
+                set: { newColor in
+                    // Check if the color is white, black, or gray and prevent it
+                    if !isRestrictedColor(newColor) {
+                        // First, temporarily set the color so the picker shows the selection
+                        let previousColor = characterOptions[name]?.highlight.swiftUIColor ?? .yellow
+                        characterOptions[name]?.highlight = SerializableColor(newColor)
+                        
+                        // Then check for duplicate colors among user's characters
+                        let charactersUsingColor = findCharactersUsingColor(newColor, excluding: name)
+                        
+                        // Show warning if ANY other character is using this color
+                        if !charactersUsingColor.isEmpty {
+                            // Revert to previous color and show warning
+                            characterOptions[name]?.highlight = SerializableColor(previousColor)
+                            pendingColorSelection = (characterName: name, color: newColor)
+                            showColorDuplicateWarning = true
+                        }
+                        // If no duplicates, the color stays applied
+                    }
+                    // If it's a restricted color, the picker will revert to the previous color
+                }
+            ), supportsOpacity: false)
+        } else {
+            // User is not playing this character or "Not Applicable" is selected - show locked gray
+            HStack {
+                Text("Highlight Color")
+                Spacer()
+                Rectangle()
+                    .fill(characterOptions[name]?.highlight.swiftUIColor ?? .gray)
+                    .frame(width: 44, height: 30)
+                    .cornerRadius(8)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .stroke(Color.gray, lineWidth: 1)
+                    )
+                Text("Locked")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
             }
-        ))
+        }
     }
 
     // MARK: - Voice Change Handlers
     private func handleGenderChange(for name: String, newGender: VoiceGender) {
         let voicesForGender = getVoicesForGender(newGender)
         
-        if let firstVoice = voicesForGender.first {
-            let charactersUsingVoice = findCharactersUsingVoice(firstVoice.identifier, excluding: name)
+        // Get currently used voice IDs to avoid duplicates
+        let currentlyUsedVoiceIDs = getCurrentlyUsedVoiceIDs(excluding: name)
+        
+        // Find the first available voice in this gender that's not already used
+        var selectedVoice: AVSpeechSynthesisVoice?
+        
+        for voice in voicesForGender {
+            if !currentlyUsedVoiceIDs.contains(voice.identifier) {
+                selectedVoice = voice
+                break
+            }
+        }
+        
+        // If no unique voice found, use the first voice in the gender (allow duplicates as fallback)
+        if selectedVoice == nil, let firstVoice = voicesForGender.first {
+            selectedVoice = firstVoice
+        }
+        
+        // Apply the selected voice
+        if let voice = selectedVoice {
+            let charactersUsingVoice = findCharactersUsingVoice(voice.identifier, excluding: name)
             
             if !charactersUsingVoice.isEmpty {
-                pendingVoiceSelection = (characterName: name, voiceID: firstVoice.identifier)
+                pendingVoiceSelection = (characterName: name, voiceID: voice.identifier)
                 showVoiceDuplicateWarning = true
             } else {
-                characterOptions[name]?.voiceID = firstVoice.identifier
+                characterOptions[name]?.voiceID = voice.identifier
             }
         }
     }
@@ -862,6 +968,7 @@ struct ContentView: View {
         }
     }
 
+    // Duplicate Voice Alert View
     @ViewBuilder
     private var voiceDuplicateAlertMessage: some View {
         if let pending = pendingVoiceSelection {
@@ -876,9 +983,38 @@ struct ContentView: View {
             }
         }
     }
+    
+    // Duplicate Color Alert View
+    @ViewBuilder
+    private var colorDuplicateAlertMessage: some View {
+        if let pending = pendingColorSelection {
+            let charactersUsingColor = findCharactersUsingColor(pending.color, excluding: pending.characterName)
+            
+            if charactersUsingColor.count == 1 {
+                Text("This color is already being used for \(charactersUsingColor[0].capitalized). Do you want to use the same color for both characters?")
+            } else if charactersUsingColor.count > 1 {
+                let characterNames = charactersUsingColor.map { $0.capitalized }
+                let formattedNames = formatCharacterNames(characterNames)
+                Text("This color is already being used for \(formattedNames). Do you want to use the same color for all these characters?")
+            }
+        }
+    }
+    
+    @ViewBuilder
+    private var colorDuplicateAlertButtons: some View {
+        Button("Cancel") {
+            pendingColorSelection = nil
+        }
+        Button("Continue Anyway") {
+            if let pending = pendingColorSelection {
+                characterOptions[pending.characterName]?.highlight = SerializableColor(pending.color)
+            }
+            pendingColorSelection = nil
+        }
+    }
 
     
-    // MARK: - Character Customization View - Fixed by breaking into smaller components
+    // MARK: - Character Customization View
     @ViewBuilder
     private var characterCustomizationView: some View {
         HamburgerOverlay(showSideMenu: $isLibraryOpen) {
@@ -911,6 +1047,11 @@ struct ContentView: View {
             } message: {
                 voiceDuplicateAlertMessage
             }
+            .alert("Color Already In Use", isPresented: $showColorDuplicateWarning) {
+                colorDuplicateAlertButtons
+            } message: {
+                colorDuplicateAlertMessage
+            }
         }
     }
 
@@ -920,7 +1061,7 @@ struct ContentView: View {
     private var characterCustomizationButtonSection: some View {
         VStack {
             Button(action: {
-                isCharacterSelected = true
+                isShowingStartingLineSelection = true
             }) {
                 Text("Continue")
                     .font(.headline)
@@ -935,9 +1076,126 @@ struct ContentView: View {
             .padding(.top, 10)
         }
     }
+   
+    // MARK: - Starting Line Selection View
+    @ViewBuilder
+    private var startingLineSelectionView: some View {
+        HamburgerOverlay(showSideMenu: $isLibraryOpen) {
+            VStack(spacing: 0) {
+                // Description text at top
+                VStack(spacing: 10) {
+                    Text("Please select the line you would like to start rehearsing from.")
+                        .font(.title2)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 20)
+                        .padding(.top, 10)
+                }
+                .background(Color(UIColor.systemBackground))
+                
+                // Script display
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 10) {
+                        ForEach(dialogue.indices, id: \.self) { index in
+                            let entry = dialogue[index]
+                            let isSelected = selectedStartingLineIndex == index
+                            let isUserCharacter = selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame })
+                            let characterColor = colorForCharacter(entry.character)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(entry.character)
+                                    .font(.headline)
+                                    .foregroundColor(.primary)
 
-
-
+                                Text(entry.line)
+                                    .font(.body)
+                                    .padding(5)
+                                    .background(
+                                        isSelected ?
+                                        Color.green.opacity(0.7) :
+                                        (isUserCharacter && !selectedCharacters.contains("Not Applicable") ?
+                                         characterColor.opacity(0.3) :
+                                         Color.clear)
+                                    )
+                                    .cornerRadius(5)
+                            }
+                            .padding(.bottom, 5)
+                            .id(index)
+                            .contentShape(Rectangle()) // Makes entire area tappable
+                            .onTapGesture {
+                                if selectedStartingLineIndex == index {
+                                    // Tapping the same line again deselects it
+                                    selectedStartingLineIndex = nil
+                                } else {
+                                    // Check if this is the last line
+                                    if index == dialogue.count - 1 {
+                                        // Show warning for last line
+                                        showLastLineWarning = true
+                                        selectedStartingLineIndex = index // Still select it, but show warning
+                                    } else {
+                                        // Select this line normally
+                                        selectedStartingLineIndex = index
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    .padding()
+                }
+                .background(Color(UIColor.systemBackground))
+                
+                // Continue button at bottom
+                VStack {
+                    Button(action: {
+                        if let startingIndex = selectedStartingLineIndex {
+                            startingLineIndex = startingIndex
+                            currentUtteranceIndex = startingIndex
+                            hasSetStartingLine = true
+                        }
+                        isCharacterSelected = true
+                    }) {
+                        Text("Continue")
+                            .font(.headline)
+                            .frame(maxWidth: .infinity)
+                            .padding()
+                            .background(selectedStartingLineIndex != nil ? Color.blue : Color.gray)
+                            .foregroundColor(.white)
+                            .cornerRadius(10)
+                    }
+                    .disabled(selectedStartingLineIndex == nil)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 20)
+                    .padding(.top, 10)
+                }
+                .background(Color(UIColor.systemBackground))
+            }
+            .navigationTitle("Select Starting Line")
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarLeading) {
+                    Button(action: {
+                        selectedStartingLineIndex = nil
+                        hasSetStartingLine = false
+                        isShowingStartingLineSelection = false
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.left")
+                            Text("Back")
+                        }
+                    }
+                }
+            }
+            .alert("Last Line Selected", isPresented: $showLastLineWarning) {
+                Button("Cancel") {
+                    selectedStartingLineIndex = nil // Deselect the last line
+                }
+                Button("Continue Anyway") {
+                    // Keep the selection, user confirmed they want to rehearse the last line
+                }
+            } message: {
+                Text("Error: You have selected the very last line of the script. Are you sure you want to rehearse that?")
+            }
+        }
+    }
     
     
     // MARK: - Script Reading View
@@ -950,16 +1208,20 @@ struct ContentView: View {
                             VStack(alignment: .leading, spacing: 10) {
                                 ForEach(dialogue.indices, id: \.self) { index in
                                     let entry = dialogue[index]
-
-                                    if displayLinesAsRead {
-                                        if index <= currentUtteranceIndex {
+                                    
+                                    // Only show lines from the starting point onwards
+                                    if index >= startingLineIndex {
+                                        if displayLinesAsRead {
+                                            if index <= currentUtteranceIndex {
+                                                lineView(for: entry, at: index)
+                                            }
+                                        } else {
                                             lineView(for: entry, at: index)
                                         }
-                                    } else {
-                                        lineView(for: entry, at: index)
                                     }
                                 }
                             }
+                            .frame(maxWidth: .infinity, alignment: .leading)
                             .padding()
                             .onChange(of: currentUtteranceIndex) { _ in
                                 withAnimation {
@@ -980,7 +1242,7 @@ struct ContentView: View {
                         Button(action: {
                             // Auto-pause speech when going back
                             pauseSpeechForNavigation()
-                            // Go back to character customization
+                            // Go back to starting line selection
                             isCharacterSelected = false
                         }) {
                             HStack {
@@ -1008,31 +1270,141 @@ struct ContentView: View {
     // MARK: - Control Buttons Section
     @ViewBuilder
     private var controlButtonsSection: some View {
-        VStack {
-            if isUserLine {
+        VStack(spacing: 15) {
+            // Main music player controls
+            HStack(spacing: 30) {
+                // Previous/Back button
                 Button(action: {
-                    userLineFinished()
+                    skipBackOneLine()
                 }) {
-                    Text("Continue")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(Color.orange)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
+                    Image(systemName: "backward.fill")
+                        .font(.title2)
+                        .foregroundColor(.blue)
+                        .frame(width: 44, height: 44)
                 }
-                .padding(.horizontal)
-            } else {
+                .disabled(currentUtteranceIndex < startingLineIndex)
+                
+                // Play/Pause button - disabled when it's user's line
                 Button(action: pauseOrResumeSpeech) {
-                    Text(isPaused ? "Resume" : "Pause")
-                        .font(.headline)
-                        .frame(maxWidth: .infinity)
-                        .padding()
-                        .background(isPaused ? Color.green : Color.yellow)
-                        .foregroundColor(.white)
-                        .cornerRadius(10)
+                    Image(systemName: isPaused ? "play.fill" : "pause.fill")
+                        .font(.title)
+                        .foregroundColor(isUserLine ? .gray : .blue)
+                        .frame(width: 44, height: 44)
                 }
-                .padding(.horizontal)
+                .disabled(isUserLine)
+                
+                // Next/Forward button - highlighted when it's user's line
+                Button(action: {
+                    if isUserLine {
+                        userLineFinished()
+                    } else {
+                        skipForwardOneLine()
+                    }
+                }) {
+                    ZStack {
+                        // Background circle when it's user's line
+                        if isUserLine {
+                            Circle()
+                                .fill(Color.blue)
+                                .frame(width: 44, height: 44)
+                        }
+                        
+                        // Icon
+                        Image(systemName: "forward.fill")
+                            .font(.title2)
+                            .foregroundColor(isUserLine ? .white : .blue)
+                    }
+                    .frame(width: 44, height: 44)
+                }
+            }
+            .padding()
+            .background(Color(UIColor.secondarySystemBackground))
+            .cornerRadius(15)
+            .padding(.horizontal)
+            
+            // Bottom buttons section (Hint and/or Restart Line)
+            if showHints {
+                // Show both hint and restart line buttons when hints are enabled
+                HStack(spacing: 20) {
+                    // Hint Button - changes based on click count and line length
+                    Button(action: {
+                        guard currentUtteranceIndex < dialogue.count else { return }
+                        let currentLine = dialogue[currentUtteranceIndex]
+                        
+                        if shouldShowFullLineButton(for: currentLine.line, clickCount: hintClickCount) {
+                            handleRevealFullLinePressed()
+                        } else {
+                            handleHintButtonPressed()
+                        }
+                    }) {
+                        HStack {
+                            Image(systemName: "lightbulb")
+                                .font(.body)
+                            
+                            // Button text changes based on state
+                            if currentUtteranceIndex < dialogue.count {
+                                let currentLine = dialogue[currentUtteranceIndex]
+                                let words = currentLine.line.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+                                
+                                if words.count <= 5 {
+                                    Text("Reveal My Line")
+                                        .font(.body)
+                                } else if shouldShowFullLineButton(for: currentLine.line, clickCount: hintClickCount) {
+                                    Text("Reveal Full Line")
+                                        .font(.body)
+                                } else {
+                                    Text("Hint")
+                                        .font(.body)
+                                }
+                            } else {
+                                Text("Hint")
+                                    .font(.body)
+                            }
+                        }
+                        .foregroundColor(isUserLine ? .yellow : .gray)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background((isUserLine ? Color.yellow : Color.gray).opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    .disabled(!isUserLine)
+                    
+                    // Restart Line Button
+                    Button(action: {
+                        restartCurrentLine()
+                    }) {
+                        HStack {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.body)
+                            Text("Restart Line")
+                                .font(.body)
+                        }
+                        .foregroundColor(.orange)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.orange.opacity(0.1))
+                        .cornerRadius(8)
+                    }
+                    .disabled(isUserLine)
+                }
+            } else {
+                // Show only restart line button (centered) when hints are disabled
+                Button(action: {
+                    restartCurrentLine()
+                }) {
+                    HStack {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.body)
+                        Text("Restart Line")
+                            .font(.body)
+                    }
+                    .foregroundColor(.orange)
+                    .padding(.horizontal, 16)
+                    .padding(.vertical, 8)
+                    .background(Color.orange.opacity(0.1))
+                    .cornerRadius(8)
+                }
+                .disabled(isUserLine)
             }
         }
         .padding(.bottom, 20)
@@ -1049,10 +1421,10 @@ struct ContentView: View {
                     activeAlert = nil
                 }
             )
-        case .displayLinesInfo:
+        case .displayLinesAsReadInfo:
             return Alert(
-                title: Text("Display Lines Info"),
-                message: Text("The display lines as read option shows all of the script when turned off. When turned on lines will only appear as they are read, making it easier to follow."),
+                title: Text("Display Lines As Read Info"),
+                message: Text("The 'Display Lines As Read' option shows all of the script when turned off. When turned on lines will only appear as they are read, making it easier to follow."),
                 dismissButton: .default(Text("OK")) {
                     activeAlert = nil
                 }
@@ -1068,8 +1440,28 @@ struct ContentView: View {
         case .displayMyLinesInfo:
             return Alert(
                 title: Text("Display My Lines"),
-                message: Text("When selected, Display My Lines will display the lines of the character the user has selected to play. When it is not selected, the user will be prompted when it is their line, but they will not be shown it."),
+                message: Text("When selected, 'Display My Lines' will display the lines of the character the user has selected to play. When it is not selected, the user will be prompted when it is their line, but they will not be shown it."),
                 dismissButton: .default(Text("OK")) {
+                    activeAlert = nil
+                }
+            )
+        case .hintsInfo:
+            return Alert(
+                title: Text("Hints"),
+                message: Text("When turned on, 'Hints' allows you to ask for the first few words of your line to be revealed if you are having trouble remembering it."),
+                dismissButton: .default(Text("OK")) {
+                    activeAlert = nil
+                }
+            )
+        case .lastLineWarning: // NEW
+            return Alert(
+                title: Text("Last Line Selected"),
+                message: Text("Error: You have selected the very last line of the script. Are you sure you want to rehearse that?"),
+                primaryButton: .default(Text("Cancel")) {
+                    selectedStartingLineIndex = nil
+                    activeAlert = nil
+                },
+                secondaryButton: .default(Text("Continue Anyway")) {
                     activeAlert = nil
                 }
             )
@@ -1120,16 +1512,48 @@ struct ContentView: View {
                             )
                             .cornerRadius(5)
                     } else {
-                        Text("It's your line! Press to continue.")
-                            .font(.body)
-                            .padding(5)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(
-                                index == currentUtteranceIndex ?
-                                colorForCharacter(entry.character).opacity(0.7) :
-                                colorForCharacter(entry.character).opacity(0.2)
-                            )
-                            .cornerRadius(5)
+                        // Check if this line has already passed (user has moved beyond it)
+                        if index < currentUtteranceIndex {
+                            // Show the actual line text for passed lines
+                            Text(entry.line)
+                                .font(.body)
+                                .padding(5)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(colorForCharacter(entry.character).opacity(0.2))
+                                .cornerRadius(5)
+                        }
+                        // Check if this is the current line and we have hint text to show
+                        else if index == currentUtteranceIndex && showHints && !revealedWords.isEmpty {
+                            // Show hint text
+                            let hintText = revealedWords.joined(separator: " ")
+                            let isFullReveal = hintClickCount >= 999 // Check if full line was revealed
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(isFullReveal ? entry.line : (hintText + (hintText == entry.line ? "" : "...")))
+                                    .font(.body)
+                                    .foregroundColor(isFullReveal ? .primary : .secondary)
+                                    .padding(5)
+                                    .frame(maxWidth: .infinity, alignment: .leading)
+                                    .background(colorForCharacter(entry.character).opacity(0.7))
+                                    .cornerRadius(5)
+                                
+                                if !isFullReveal {
+                                    Text("Hint: Tap hint button for more")
+                                        .font(.caption)
+                                        .foregroundColor(.secondary)
+                                        .italic()
+                                }
+                            }
+                        } else if index == currentUtteranceIndex {
+                            // Current line - show "It's your line" message
+                            Text("It's your line! Press to continue.")
+                                .font(.body)
+                                .padding(5)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .background(colorForCharacter(entry.character).opacity(0.7))
+                                .cornerRadius(5)
+                        }
+                        // For future lines (index > currentUtteranceIndex), show nothing when displayMyLines is off
                     }
                 } else {
                     // This is a non-selected character - check if THIS character has gray or custom color
@@ -1193,8 +1617,8 @@ struct ContentView: View {
     
     // MARK: - Voice Management System
     private func assignUniqueVoices() {
-        // Get all available voices from our curated lists
-        let allCuratedVoices = getVoicesForGender(.male) + getVoicesForGender(.female) + getVoicesForGender(.androgynous)
+        // Get all available male voices as default
+        let maleVoices = getVoicesForGender(.male)
         
         var voiceIndex = 0
         
@@ -1203,20 +1627,15 @@ struct ContentView: View {
             if let currentVoiceID = characterOptions[name]?.voiceID,
                !currentVoiceID.isEmpty,
                AVSpeechSynthesisVoice(identifier: currentVoiceID) != nil {
-                // Character already has a valid voice, keep it (even if duplicate)
+                // Character already has a valid voice, keep it
                 continue
             } else {
-                // Character needs a new voice - assign next available from curated list
-                while voiceIndex < allCuratedVoices.count {
-                    let voice = allCuratedVoices[voiceIndex]
+                // Character needs a new voice - assign next available male voice
+                if voiceIndex < maleVoices.count {
+                    characterOptions[name]?.voiceID = maleVoices[voiceIndex].identifier
                     voiceIndex += 1
-                    
-                    characterOptions[name]?.voiceID = voice.identifier
-                    break
-                }
-                
-                // Final fallback if we somehow run out of curated voices
-                if let currentVoiceID = characterOptions[name]?.voiceID, currentVoiceID.isEmpty {
+                } else {
+                    // Fallback if we run out of male voices
                     let fallbackVoice = getDefaultVoiceID()
                     characterOptions[name]?.voiceID = fallbackVoice
                 }
@@ -1282,7 +1701,7 @@ struct ContentView: View {
         ]
     }
 
-    private var androgynousVoiceKeys: [String] {
+    private var otherVoiceKeys: [String] {
         return [
             "bahh en-us", "jester en-us", "organ en-us", "cellos en-us",
             "zarvox en-us", "whisper en-us", "good news en-us", "bad news en-us",
@@ -1341,7 +1760,7 @@ struct ContentView: View {
         }
         
         // Fallback to any curated voice
-        let curatedVoices = getVoicesForGender(.female) + getVoicesForGender(.male) + getVoicesForGender(.androgynous)
+        let curatedVoices = getVoicesForGender(.female) + getVoicesForGender(.male) + getVoicesForGender(.other)
         if let firstCurated = curatedVoices.first {
             return firstCurated.identifier
         }
@@ -1373,8 +1792,8 @@ struct ContentView: View {
             return .male
         } else if femaleVoiceKeys.contains(voiceKey) {
             return .female
-        } else if androgynousVoiceKeys.contains(voiceKey) {
-            return .androgynous
+        } else if otherVoiceKeys.contains(voiceKey) {
+            return .other
         }
         
         // Default to female if voice not found in curated lists
@@ -1392,8 +1811,8 @@ struct ContentView: View {
             targetVoiceKeys = maleVoiceKeys
         case .female:
             targetVoiceKeys = femaleVoiceKeys
-        case .androgynous:
-            targetVoiceKeys = androgynousVoiceKeys
+        case .other:
+            targetVoiceKeys = otherVoiceKeys
         }
         
         // Find matching voices from available system voices
@@ -1422,7 +1841,59 @@ struct ContentView: View {
         
         return "\(voice.name) (\(voice.language))"
     }
-        // MARK: - Highlight Helper functions
+    // MARK: - Highlight Helper functions
+    
+    // Helper function to find characters using the same color
+    private func findCharactersUsingColor(_ color: Color, excluding excludeName: String) -> [String] {
+        var charactersUsingColor: [String] = []
+        
+        // Only check among characters the user is playing (excluding "Not Applicable")
+        let userCharacters = selectedCharacters.filter { $0 != "Not Applicable" }
+        
+        for characterName in userCharacters {
+            if characterName != excludeName,
+               let characterColor = characterOptions[characterName]?.highlight.swiftUIColor,
+               colorsAreEqual(color, characterColor) {
+                charactersUsingColor.append(characterName)
+            }
+        }
+        
+        return charactersUsingColor
+    }
+    
+    // Helper function to check for restricted colors
+    private func isRestrictedColor(_ color: Color) -> Bool {
+        let uiColor = UIColor(color)
+        var red: CGFloat = 0, green: CGFloat = 0, blue: CGFloat = 0, alpha: CGFloat = 0
+        uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+        
+        // Check for white (high values for all RGB)
+        if red > 0.85 && green > 0.85 && blue > 0.85 {
+            return true
+        }
+        
+        // Check for black (low values for all RGB)
+        if red < 0.15 && green < 0.15 && blue < 0.15 {
+            return true
+        }
+        
+        // Check for gray (similar values for RGB) - more restrictive detection
+        let maxDiff = max(abs(red - green), abs(green - blue), abs(red - blue))
+        if maxDiff < 0.05 {  // Very similar RGB values = gray
+            return true
+        }
+        
+        // Additional check for low saturation colors (which appear grayish)
+        let maxRGB = max(red, green, blue)
+        let minRGB = min(red, green, blue)
+        let saturation = maxRGB == 0 ? 0 : (maxRGB - minRGB) / maxRGB
+        
+        if saturation < 0.2 {  // Low saturation = grayish
+            return true
+        }
+        
+        return false
+    }
         
     private func isColorGray(_ color: Color) -> Bool {
             let defaultDarkGray = Color.gray.opacity(0.3)
@@ -1561,6 +2032,368 @@ struct ContentView: View {
             }
         }
 
+    // MARK: - Skip Navigation Functions
+    private func skipBackOneLine() {
+        print("🔄 Skip back pressed - Current index: \(currentUtteranceIndex), isPaused: \(isPaused)")
+        print("🔄 Starting line index: \(startingLineIndex)")
+        print("🔄 Button should be disabled if: \(currentUtteranceIndex <= startingLineIndex) = \(currentUtteranceIndex <= startingLineIndex)")
+        
+        if isPaused {
+            skipBackWhilePaused()
+        } else {
+            skipBackWhileUnpaused()
+        }
+    }
+
+    private func skipForwardOneLine() {
+        print("🔄 Skip forward pressed - Current index: \(currentUtteranceIndex), isPaused: \(isPaused)")
+        
+        if isPaused {
+            skipForwardWhilePaused()
+        } else {
+            skipForwardWhileUnpaused()
+        }
+    }
+    
+    // MARK: - Paused Skip Functions
+    private func skipBackWhilePaused() {
+        print("⏸️ Skipping back while paused - currentIndex: \(currentUtteranceIndex), startingIndex: \(startingLineIndex)")
+        
+        // Stop any speech
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+            print("🛑 Stopped speaking")
+        }
+        synthesizer.delegate = nil
+        speechDelegate = nil
+        
+        // Move index back OR stay at current if at beginning
+        if currentUtteranceIndex > startingLineIndex {
+            currentUtteranceIndex -= 1
+            resetHintForNewLine()
+            print("⬅️ Moved back to index: \(currentUtteranceIndex)")
+        } else {
+            print("🔄 At starting line (\(startingLineIndex)), staying at current line ready to restart at index: \(currentUtteranceIndex)")
+            // Stay at same index - when user presses play it will restart this line
+        }
+        
+        // Update states
+        updateProgress()
+        updateUserLineState()
+        
+        // Stay paused
+        isPaused = true
+        isSpeaking = false
+        
+        print("✅ Paused skip back complete - index: \(currentUtteranceIndex), isPaused: \(isPaused)")
+    }
+
+    private func skipForwardWhilePaused() {
+        print("⏸️ Skipping forward while paused")
+        
+        // Stop any speech
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+        synthesizer.delegate = nil
+        speechDelegate = nil
+        
+        // Move index forward
+        currentUtteranceIndex += 1
+        resetHintForNewLine()
+        print("➡️ Moved forward to index: \(currentUtteranceIndex)")
+        
+        // Check end of script
+        if currentUtteranceIndex >= dialogue.count {
+            print("📜 Reached end of script")
+            showScriptCompletionAlert = true
+            return
+        }
+        
+        // Update states
+        updateProgress()
+        updateUserLineState()
+        
+        // Stay paused
+        isPaused = true
+        isSpeaking = false
+        
+        print("✅ Paused skip forward complete - index: \(currentUtteranceIndex), isPaused: \(isPaused)")
+    }
+
+    // MARK: - Unpaused Skip Functions
+    private func skipBackWhileUnpaused() {
+        print("▶️ Skipping back while unpaused - currentIndex: \(currentUtteranceIndex), startingIndex: \(startingLineIndex)")
+        
+        // Stop current speech
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+            print("🛑 Stopped speaking")
+        }
+        synthesizer.delegate = nil
+        speechDelegate = nil
+        
+        // Move index back OR restart current line if at beginning
+        if currentUtteranceIndex > startingLineIndex {
+            currentUtteranceIndex -= 1
+            resetHintForNewLine()
+            print("⬅️ Moved back to index: \(currentUtteranceIndex)")
+        } else {
+            print("🔄 At starting line (\(startingLineIndex)), will restart current line at index: \(currentUtteranceIndex)")
+            // Stay at same index but we'll restart it below
+        }
+        
+        // Update states
+        updateProgress()
+        updateUserLineState()
+        
+        // Start speaking immediately if not user line
+        isPaused = false
+        isSpeaking = false
+        
+        if !isUserLine {
+            print("🎬 About to call speakLineForUnpausedSkip() for restart/previous line")
+            speakLineForUnpausedSkip()
+            print("🎬 Called speakLineForUnpausedSkip()")
+        } else {
+            print("👤 Line is user's line - waiting for user")
+        }
+        
+        print("✅ Unpaused skip back complete - index: \(currentUtteranceIndex), speaking: \(!isUserLine)")
+    }
+
+    private func skipForwardWhileUnpaused() {
+        print("▶️ Skipping forward while unpaused")
+        
+        // Stop current speech
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+        }
+        synthesizer.delegate = nil
+        speechDelegate = nil
+        
+        // Move index forward
+        currentUtteranceIndex += 1
+        resetHintForNewLine()
+        print("➡️ Moved forward to index: \(currentUtteranceIndex)")
+        
+        // Check end of script
+        if currentUtteranceIndex >= dialogue.count {
+            print("📜 Reached end of script")
+            showScriptCompletionAlert = true
+            return
+        }
+        
+        // Update states
+        updateProgress()
+        updateUserLineState()
+        
+        // Start speaking immediately if not user line
+        isPaused = false
+        isSpeaking = false
+        
+        if !isUserLine {
+            speakLineForUnpausedSkip()
+        }
+        
+        print("✅ Unpaused skip forward complete - index: \(currentUtteranceIndex), speaking: \(!isUserLine)")
+    }
+    
+    // Special speech function ONLY for unpaused skips
+    private func speakLineForUnpausedSkip() {
+        guard currentUtteranceIndex < dialogue.count else {
+            showScriptCompletionAlert = true
+            return
+        }
+
+        let entry = dialogue[currentUtteranceIndex]
+        print("🎭 Speaking after unpaused skip - character: \(entry.character), index: \(currentUtteranceIndex)")
+        
+        // Give synthesizer a moment to settle after stop/clear operations
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+            let utterance = AVSpeechUtterance(string: entry.line)
+
+            if let id = self.characterOptions[entry.character]?.voiceID,
+               let voice = AVSpeechSynthesisVoice(identifier: id) {
+                utterance.voice = voice
+            }
+            utterance.postUtteranceDelay = 0.5
+
+            // Set up normal delegate
+            let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
+                print("🔔 Speech delegate fired normally - incrementing from \(currentUtteranceIndex)")
+                currentUtteranceIndex += 1
+                updateProgress()
+                startNextLine()
+            }
+            self.speechDelegate = delegate
+            self.synthesizer.delegate = delegate
+            self.synthesizer.speak(utterance)
+            
+            print("🗣️ Started speaking line after short delay")
+        }
+    }
+    
+    
+    // MARK: - Skip Helper Functions
+    private func updateUserLineState() {
+        guard currentUtteranceIndex < dialogue.count else {
+            isUserLine = false
+            return
+        }
+        
+        let entry = dialogue[currentUtteranceIndex]
+        if selectedCharacters.contains("Not Applicable") {
+            isUserLine = false
+        } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
+            isUserLine = true
+        } else {
+            isUserLine = false
+        }
+    }
+    
+    private func speakLineDirectly(_ text: String, for character: String) {
+        let utterance = AVSpeechUtterance(string: text)
+
+        // Apply the user-picked voice if one is set
+        if let id = characterOptions[character]?.voiceID,
+           let voice = AVSpeechSynthesisVoice(identifier: id) {
+            utterance.voice = voice
+        }
+        utterance.postUtteranceDelay = 2
+
+        let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
+            currentUtteranceIndex += 1
+            updateProgress()
+            startNextLine()
+        }
+        speechDelegate = delegate
+        synthesizer.delegate = delegate
+        synthesizer.speak(utterance)
+    }
+    
+    // MARK: - Restart Current Line Function
+    private func restartCurrentLine() {
+        print("🔄 Restart line button pressed - Current index: \(currentUtteranceIndex)")
+        
+        // Stop any current speech
+        if synthesizer.isSpeaking {
+            synthesizer.stopSpeaking(at: .immediate)
+            print("🛑 Stopped speaking for restart")
+        }
+        
+        // Clear delegates
+        synthesizer.delegate = nil
+        speechDelegate = nil
+        print("🗑️ Cleared delegates for restart")
+        
+        // Reset speech states
+        isSpeaking = false
+        isPaused = false
+        
+        // Create fresh synthesizer to ensure clean state
+        synthesizer = AVSpeechSynthesizer()
+        print("💫 Created fresh synthesizer for restart")
+        
+        // Update user line state
+        updateUserLineState()
+        
+        // Start the current line if it's not a user line
+        if !isUserLine {
+            // Use the delayed speech function to avoid immediate delegate issues
+            speakLineForUnpausedSkip()
+            print("🎬 Restarted current line")
+        } else {
+            print("👤 Current line is user's - no restart needed")
+        }
+        
+        print("✅ Line restart complete - index: \(currentUtteranceIndex)")
+    }
+    
+    // MARK: - Hint Helper Functions
+    private func getHintText(for line: String, clickCount: Int) -> String {
+        let words = line.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+        
+        // If line has 5 words or fewer, always show the full line
+        if words.count <= 5 {
+            return line
+        }
+        
+        // For longer lines, show progressively more words
+        let wordsToShow: Int
+        if clickCount == 1 {
+            // First click: show first 3-4 words (about 1/3 of line)
+            wordsToShow = max(3, words.count / 3)
+        } else {
+            // Second click: show about 2/3 of the line
+            wordsToShow = max(4, (words.count * 2) / 3)
+        }
+        
+        let revealedWords = Array(words.prefix(wordsToShow))
+        return revealedWords.joined(separator: " ") + "..."
+    }
+
+    private func shouldShowFullLineButton(for line: String, clickCount: Int) -> Bool {
+        let words = line.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+        
+        // If line is short, never show "reveal full line" button
+        if words.count <= 5 {
+            return false
+        }
+        
+        // Show "reveal full line" button after second click
+        return clickCount >= 2
+    }
+    
+    private func handleHintButtonPressed() {
+        guard currentUtteranceIndex < dialogue.count else { return }
+        
+        let currentLine = dialogue[currentUtteranceIndex]
+        let words = currentLine.line.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+        
+        // Reset hint if we're on a different line
+        if currentHintLineIndex != currentUtteranceIndex {
+            hintClickCount = 0
+            currentHintLineIndex = currentUtteranceIndex
+            revealedWords = []
+        }
+        
+        // For lines with 5 words or fewer, always show the full line immediately
+        if words.count <= 5 {
+            revealedWords = words
+            hintClickCount = 999 // Set high number to indicate full reveal
+            return
+        }
+        
+        // For longer lines, increment click count and show progressive hints
+        hintClickCount += 1
+        
+        // Generate the hint text
+        let hintText = getHintText(for: currentLine.line, clickCount: hintClickCount)
+        revealedWords = hintText.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty && $0 != "..." }
+    }
+    
+    private func handleRevealFullLinePressed() {
+        guard currentUtteranceIndex < dialogue.count else { return }
+        
+        let currentLine = dialogue[currentUtteranceIndex]
+        let words = currentLine.line.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
+        revealedWords = words
+        hintClickCount = 999 // Set high number to indicate full reveal
+    }
+
+    private func resetHintForNewLine() {
+        hintClickCount = 0
+        currentHintLineIndex = -1
+        revealedWords = []
+    }
+    
+    private func shouldShowHintText(for index: Int) -> Bool {
+        return index == currentUtteranceIndex &&
+               showHints &&
+               !revealedWords.isEmpty &&
+               currentHintLineIndex == index
+    }
     
     // MARK: - Script Conversion Function
     func convertScriptToCorrectFormat(from text: String) -> String {
@@ -1675,14 +2508,17 @@ struct ContentView: View {
     
     // MARK: - Speech Functions
     func initializeSpeech() {
-        currentUtteranceIndex = 0
+        // Don't change currentUtteranceIndex here - it should be set before calling this function
         isSpeaking = false
-        isPaused = false
+        isPaused = true  // Changed: Start paused instead of playing
 
         synthesizer = AVSpeechSynthesizer()
         speechDelegate = nil
 
-        startNextLine()
+        // Set the correct user line state but don't start speaking
+        updateUserLineState()
+        
+        print("🎬 Speech initialized in paused state - press play to start")
     }
 
     private func startNextLine() {
@@ -1708,9 +2544,20 @@ struct ContentView: View {
     }
 
     private func userLineFinished() {
+        resetHintForNewLine()
         currentUtteranceIndex += 1
         updateProgress()
-        startNextLine()
+        
+        // Check if we were in a paused state (like after skipping)
+        if isPaused {
+            // Stay paused, just update the UI state for the new line
+            updateUserLineState()
+            print("📍 User line finished, staying paused at index: \(currentUtteranceIndex)")
+        } else {
+            // Normal flow - continue to next line
+            startNextLine()
+            print("📍 User line finished, continuing to index: \(currentUtteranceIndex)")
+        }
     }
 
     /// Speaks the line using the chosen voice for its character
@@ -1750,33 +2597,57 @@ struct ContentView: View {
     }
 
     func pauseOrResumeSpeech() {
-        guard synthesizer.isSpeaking else { return }
-        if isPaused {
-            isPaused = false
-            synthesizer.continueSpeaking()
+        print("🎵 Pause/Resume called - isSpeaking: \(synthesizer.isSpeaking), isPaused: \(isPaused)")
+        
+        if synthesizer.isSpeaking {
+            if isPaused {
+                // Resume
+                print("▶️ Resuming...")
+                synthesizer.continueSpeaking()
+                isPaused = false
+                print("▶️ Resumed - isPaused now: \(isPaused)")
+            } else {
+                // Pause
+                print("⏸️ Pausing...")
+                synthesizer.pauseSpeaking(at: .word)
+                isPaused = true
+                print("⏸️ Paused - isPaused now: \(isPaused)")
+            }
         } else {
-            synthesizer.pauseSpeaking(at: .word)
-            isPaused = true
+            // If not speaking, start from current line
+            print("🎬 Not speaking - starting from current line")
+            isPaused = false
+            startNextLine()
+            print("🎬 Started - isPaused now: \(isPaused)")
         }
     }
+    
+    
 
     private func restartScript(keepSettings: Bool) {
         synthesizer.stopSpeaking(at: .immediate)
         synthesizer.delegate = nil
 
-        currentUtteranceIndex = 0
         isUserLine = false
 
         if keepSettings {
+            // Keep the same starting line when keeping settings
+            currentUtteranceIndex = startingLineIndex
             initializeSpeech()
         } else {
+            // Reset everything when changing settings
+            currentUtteranceIndex = 0
+            startingLineIndex = 0
+            hasSetStartingLine = false
             isCharacterSelected = false
             isShowingCharacterCustomization = false
+            isShowingStartingLineSelection = false
             selectedCharacters = []
             displayLinesAsRead = true
+            selectedStartingLineIndex = nil
         }
     }
-
+    
     func colorForCharacter(_ character: String) -> Color {
         characterOptions[character]?.highlight.swiftUIColor ?? .gray
     }
