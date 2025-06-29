@@ -17,7 +17,7 @@
 //enum VoiceGender: String, CaseIterable, Identifiable {
 //    case male = "Male"
 //    case female = "Female"
-//    case androgynous = "Androgynous"
+//    case other = "Other"
 //    
 //    var id: String { self.rawValue }
 //}
@@ -77,16 +77,34 @@
 //    @State private var hintClickCount: Int = 0
 //    @State private var currentHintLineIndex: Int = -1
 //    @State private var revealedWords: [String] = []
+//    
+//    @FocusState private var isScriptNameFocused: Bool
 //
+//    @State private var scriptName: String = ""
+//    @State private var speechSessionId: UUID = UUID()
+//    
+//    @State private var wasPlayingBeforeRating: Bool = false
+//    @State private var wasPausedBeforeRating: Bool = false
+//    
+//    @State private var hasTappedStars: Bool = false
+//    @State private var selectedStarRating: Int = 0
+//    @State private var showStarRating: Bool = false
+//    @State private var appUsageTimer: Timer?
+//    @State private var usageStartTime: Date?
+//    @State private var showRatingPrompt: Bool = false
+//    @State private var hasPromptedForRating: Bool = false
+//    private let ratingPromptDelay: TimeInterval = 20.0 // 20 seconds for testing (change to 120.0 for 2 minutes in production)
 //
-//    // Update your AlertType enum to include hintsInfo
 //    enum AlertType: Identifiable {
 //        case noCharacterSelected
 //        case displayLinesAsReadInfo
 //        case notApplicableInfo
 //        case displayMyLinesInfo
 //        case lastLineWarning
-//        case hintsInfo // NEW
+//        case hintsInfo
+//        case scriptFormatError
+//        case emptyScriptName
+//        case emptyScriptNameAndNoCharacter // NEW
 //
 //        var id: Int {
 //            switch self {
@@ -95,7 +113,10 @@
 //            case .notApplicableInfo: return 2
 //            case .displayMyLinesInfo: return 3
 //            case .lastLineWarning: return 4
-//            case .hintsInfo: return 5 // NEW
+//            case .hintsInfo: return 5
+//            case .scriptFormatError: return 6
+//            case .emptyScriptName: return 7
+//            case .emptyScriptNameAndNoCharacter: return 8 // NEW
 //            }
 //        }
 //    }
@@ -118,10 +139,8 @@
 //
 //    var body: some View {
 //        ZStack(alignment: .leading) {
-//            NavigationView {
-//                mainContentView
-//            }
-//            .navigationBarHidden(isShowingSplash)
+//            mainContentView
+//                .navigationBarHidden(isShowingSplash)
 //            
 //            // Library slide-in panel (updated to use LibraryManager)
 //            if isLibraryOpen {
@@ -256,22 +275,23 @@
 //    private var mainContentView: some View {
 //        if isShowingSplash {
 //            splashView
-//        } else if !hasUploadedFile {
-//            HamburgerOverlay(showSideMenu: $isLibraryOpen) {
-//                uploadView
-//            }
-//        } else if !hasPressedContinue {
-//            HamburgerOverlay(showSideMenu: $isLibraryOpen) {
-//                continueView
-//            }
-//        } else if !isShowingCharacterCustomization {
-//            settingsView
-//        } else if !isShowingStartingLineSelection {
-//            characterCustomizationView
-//        } else if !isCharacterSelected {
-//            startingLineSelectionView
 //        } else {
-//            scriptReadingView
+//            NavigationView {
+//                if !hasUploadedFile {
+//                    uploadView
+//                } else if !hasPressedContinue {
+//                    continueView
+//                } else if !isShowingCharacterCustomization {
+//                    settingsView
+//                } else if !isShowingStartingLineSelection {
+//                    characterCustomizationView
+//                } else if !isCharacterSelected {
+//                    startingLineSelectionView
+//                } else {
+//                    scriptReadingView
+//                }
+//            }
+//            .navigationViewStyle(StackNavigationViewStyle()) // Ensures consistent behavior across devices
 //        }
 //    }
 //
@@ -343,6 +363,30 @@
 //            Spacer()
 //        }
 //        .padding()
+//        .alert(item: $activeAlert) { alert in
+//            alertForType(alert)
+//        }
+//        .navigationTitle("")
+//        .navigationBarTitleDisplayMode(.inline)
+//        .toolbar {
+//            // Add invisible title to enable navigation bar
+//            ToolbarItem(placement: .principal) {
+//                Text("")
+//                    .foregroundColor(.clear)
+//            }
+//            ToolbarItem(placement: .navigationBarTrailing) {
+//                Button(action: {
+//                    withAnimation {
+//                        isLibraryOpen.toggle()
+//                    }
+//                }) {
+//                    Image(systemName: "line.3.horizontal")
+//                        .font(.title2)
+//                        .foregroundColor(.blue)
+//                }
+//                .accessibilityLabel("Main menu")
+//            }
+//        }
 //    }
 //
 //    // MARK: - Input Type Content
@@ -358,33 +402,107 @@
 //        }
 //    }
 //
-//    // MARK: - Typed Input View
-//    @ViewBuilder
 //    private var typedInputView: some View {
-//        TextEditor(text: $fileContent)
-//            .frame(height: 200)
-//            .border(Color.gray, width: 1)
-//            .padding(.horizontal, 40)
+//        VStack(spacing: 15) {
+//            // Format guidance
+//            VStack(alignment: .leading, spacing: 8) {
+//                Text("Script Format:")
+//                    .font(.headline)
+//                    .foregroundColor(.primary)
+//                
+//                Text("Please format your script with each line as:")
+//                    .font(.subheadline)
+//                    .foregroundColor(.secondary)
+//                    .multilineTextAlignment(.leading)
+//                    .fixedSize(horizontal: false, vertical: true)
+//                
+//                Text("Character Name: Line of dialogue")
+//                    .font(.body)
+//                    .fontWeight(.medium)
+//                    .multilineTextAlignment(.leading)
+//                    .fixedSize(horizontal: false, vertical: true)
+//                    .padding(.horizontal, 12)
+//                    .padding(.vertical, 8)
+//                    .background(Color(UIColor.secondarySystemBackground))
+//                    .cornerRadius(8)
+//                
+//                Text("Example:")
+//                    .font(.subheadline)
+//                    .foregroundColor(.secondary)
+//                    .padding(.top, 4)
+//                
+//                VStack(alignment: .leading, spacing: 2) {
+//                    Text("JOHN: Hello, how are you today?")
+//                    Text("MARY: I'm doing great, thanks for asking!")
+//                    Text("JOHN: That's wonderful to hear.")
+//                }
+//                .font(.caption)
+//                .padding(.horizontal, 12)
+//                .padding(.vertical, 8)
+//                .background(Color.blue.opacity(0.1))
+//                .cornerRadius(8)
+//            }
+//            .padding(.horizontal, 20)
+//            
+//            // TextEditor with placeholder and tap-to-dismiss
+//            ZStack(alignment: .topLeading) {
+//                VStack {
+//                    ZStack(alignment: .topLeading) {
+//                        TextEditor(text: $fileContent)
+//                            .frame(height: 200)
+//                            .border(Color.gray, width: 1)
+//                        
+//                        // Placeholder text
+//                        if fileContent.isEmpty {
+//                            Text("Type script here")
+//                                .foregroundColor(.gray)
+//                                .padding(.horizontal, 8)
+//                                .padding(.vertical, 12)
+//                                .allowsHitTesting(false)
+//                        }
+//                    }
+//                    .padding(.horizontal, 40)
+//                }
+//            }
 //
-//        Button(action: {
-//            let convertedScript = convertScriptToCorrectFormat(from: fileContent)
-//            self.dialogue = self.extractDialogue(from: convertedScript)
-//            let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
-//            self.characters = extractedCharacters
-//            ensureCharacterOptions()
-//            updateHighlightColors() // Set initial colors
-//            self.uploadedFileName = "Typed Script"
-//            self.hasPressedContinue = false
-//            self.hasUploadedFile = true
-//        }) {
-//            Text("Submit Script")
-//                .font(.headline)
-//                .padding()
-//                .foregroundColor(.white)
-//                .background(Color.blue)
-//                .cornerRadius(10)
+//            Button(action: {
+//                // Dismiss keyboard first
+//                UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+//                
+//                // Always validate format
+//                let convertedScript = convertScriptToCorrectFormat(from: fileContent)
+//                let testDialogue = extractDialogue(from: convertedScript)
+//                
+//                // Check if any dialogue was extracted OR if fileContent is empty
+//                if testDialogue.isEmpty || fileContent.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+//                    // Show format error alert
+//                    activeAlert = .scriptFormatError
+//                    return
+//                }
+//                
+//                // If format is valid, proceed normally
+//                self.dialogue = testDialogue
+//                let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
+//                self.characters = extractedCharacters
+//                ensureCharacterOptions()
+//                updateHighlightColors()
+//                self.uploadedFileName = "Typed Script"
+//                self.hasPressedContinue = false
+//                self.hasUploadedFile = true
+//            }) {
+//                Text("Submit Script")
+//                    .font(.headline)
+//                    .padding()
+//                    .foregroundColor(.white)
+//                    .background(Color.blue)
+//                    .cornerRadius(10)
+//            }
+//            .padding(.top, 10)
 //        }
-//        .padding(.top, 10)
+//        .contentShape(Rectangle())
+//        .onTapGesture {
+//            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+//        }
 //    }
 //
 //    // MARK: - PDF Input View
@@ -525,7 +643,25 @@
 //            .padding(.horizontal, 40)
 //            .padding(.top, 10)
 //
-//            Button(action: { hasPressedContinue = true }) {
+//            Button(action: {
+//                // Validate script format when Continue is pressed
+//                let convertedScript = convertScriptToCorrectFormat(from: fileContent)
+//                self.dialogue = self.extractDialogue(from: convertedScript)
+//                
+//                // Check if any dialogue was extracted
+//                if dialogue.isEmpty {
+//                    // Show format error alert and stay on this page
+//                    activeAlert = .scriptFormatError
+//                    return
+//                }
+//                
+//                // If format is valid, proceed
+//                let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
+//                self.characters = extractedCharacters
+//                ensureCharacterOptions()
+//                updateHighlightColors()
+//                hasPressedContinue = true
+//            }) {
 //                Text("Continue")
 //                    .font(.headline)
 //                    .frame(maxWidth: .infinity)
@@ -539,35 +675,96 @@
 //            Spacer()
 //        }
 //        .padding()
+//        .alert(item: $activeAlert) { alert in
+//            alertForType(alert)
+//        }
+//        .navigationTitle("")
+//        .navigationBarTitleDisplayMode(.inline)
+//        .toolbar {
+//            // Add invisible title to enable navigation bar
+//            ToolbarItem(placement: .principal) {
+//                Text("")
+//                    .foregroundColor(.clear)
+//            }
+//            ToolbarItem(placement: .navigationBarTrailing) {
+//                Button(action: {
+//                    withAnimation {
+//                        isLibraryOpen.toggle()
+//                    }
+//                }) {
+//                    Image(systemName: "line.3.horizontal")
+//                        .font(.title2)
+//                        .foregroundColor(.blue)
+//                }
+//                .accessibilityLabel("Main menu")
+//            }
+//        }
 //    }
 //
 //    // MARK: - Settings View
 //    @ViewBuilder
 //    private var settingsView: some View {
-//            HamburgerOverlay(showSideMenu: $isLibraryOpen) {
-//                ZStack(alignment: .topLeading) {
+//        ZStack(alignment: .topLeading) {
+//            ScrollViewReader { proxy in
+//                ScrollView {
 //                    VStack(spacing: 0) {
 //                        VStack(alignment: .leading) {
-//                            // Removed the large bold "Settings" title
-//                            // Now only uses the navigation title at the top
+//                            Text("Settings")
+//                                .font(.largeTitle)
+//                                .bold()
+//                                .padding(.top, 20)
+//                                .padding(.bottom, 20)
 //                            
 //                            Text("Select your characters")
 //                                .font(.title2)
 //                                .padding(.vertical, 5)
-//
+//                            
 //                            characterSelectionSection
-//
+//                            
 //                            displaySettingsSection
-//
-//                            Spacer()
+//                            
+//                            Spacer(minLength: 20)
+//                            
+//                            // Script name input section
+//                            VStack(alignment: .leading, spacing: 10) {
+//                                Text("Script Name")
+//                                    .font(.title2)
+//                                    .padding(.bottom, 5)
+//                                
+//                                ZStack(alignment: .topLeading) {
+//                                    TextField("Enter script name", text: $scriptName)
+//                                        .textFieldStyle(RoundedBorderTextFieldStyle())
+//                                        .font(.body)
+//                                        .focused($isScriptNameFocused)
+//                                    
+//                                    // Placeholder-like behavior when empty
+//                                    if scriptName.isEmpty {
+//                                        Text("Enter script name")
+//                                            .foregroundColor(.gray)
+//                                            .padding(.horizontal, 8)
+//                                            .padding(.vertical, 8)
+//                                            .allowsHitTesting(false)
+//                                    }
+//                                }
+//                            }
+//                            .id("scriptNameField")
+//                            .padding(.bottom, 20)
 //
 //                            Button(action: {
-//                                if selectedCharacters.isEmpty {
+//                                let hasScriptName = !scriptName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+//                                let hasSelectedCharacters = !selectedCharacters.isEmpty
+//                                
+//                                // Check all possible combinations
+//                                if !hasScriptName && !hasSelectedCharacters {
+//                                    activeAlert = .emptyScriptNameAndNoCharacter
+//                                } else if !hasScriptName {
+//                                    activeAlert = .emptyScriptName
+//                                } else if !hasSelectedCharacters {
 //                                    activeAlert = .noCharacterSelected
 //                                } else {
-//                                    updateHighlightColors() // Update colors before going to customization
+//                                    // All requirements met - continue
+//                                    updateHighlightColors()
 //                                    isShowingCharacterCustomization = true
-//                                    
 //                                }
 //                            }) {
 //                                Text("Continue")
@@ -578,96 +775,121 @@
 //                                    .foregroundColor(.white)
 //                                    .cornerRadius(10)
 //                            }
-//                            .padding(.bottom, 10)
-//                            
-//                            // Save Script Button
-//                            Button(action: {
-//                                saveCurrentScript()
-//                            }) {
-//                                Text("Save Script")
-//                                    .font(.headline)
-//                                    .frame(maxWidth: .infinity)
-//                                    .padding()
-//                                    .background(Color.green)
-//                                    .foregroundColor(.white)
-//                                    .cornerRadius(10)
-//                            }
 //                            .padding(.bottom, 20)
 //                        }
 //                        .padding(.horizontal, 20)
-//                        .padding(.top, 10) // Adjusted top padding since we removed the large title
+//                        .padding(.top, 10)
 //                    }
 //                }
-//                .alert(item: $activeAlert) { alert in
-//                    alertForType(alert)
-//                }
-//                .frame(maxHeight: .infinity, alignment: .top)
-//                .navigationTitle("Settings") // This creates the small title at the top
-//                .navigationBarTitleDisplayMode(.inline) // Ensures small title format
-//                .toolbar {
-//                    ToolbarItem(placement: .navigationBarLeading) {
-//                        Button(action: {
-//                            hasPressedContinue = false
-//                        }) {
-//                            HStack {
-//                                Image(systemName: "arrow.left")
-//                                Text("Back")
+//                .onChange(of: isScriptNameFocused) { _, isFocused in
+//                    if isFocused {
+//                        print("📝 Text field focused - scrolling to center")
+//                        // Small delay to let keyboard animation start
+//                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+//                            withAnimation(.easeInOut(duration: 0.6)) {
+//                                proxy.scrollTo("scriptNameField", anchor: .center)
 //                            }
 //                        }
-//                    }
-//                }
-//                .onChange(of: selectedCharacters) { _, newValue in
-//                    if newValue.contains("Not Applicable") {
-//                        displayMyLines = false
-//                        showHints = false  // Turn off hints when "Not Applicable" is selected
-//                    }
-//                    // Update highlight colors when character selection changes
-//                    updateHighlightColors()
-//                }
-//                .onChange(of: displayMyLines) { _, newValue in
-//                    if newValue {
-//                        showHints = false  // Turn off hints when "Display My Lines" is turned on
-//                    }
-//                }
-//                .onChange(of: showHints) { _, newValue in
-//                    if newValue {
-//                        displayMyLines = false  // Turn off "Display My Lines" when hints is turned on
+//                    } else {
+//                        print("📝 Text field lost focus")
 //                    }
 //                }
 //            }
 //        }
+//        .alert(item: $activeAlert) { alert in
+//            alertForType(alert)
+//        }
+//        .navigationTitle("")
+//        .navigationBarTitleDisplayMode(.inline)
+//        .toolbar {
+//            // invisible title to enable navigation bar
+//            ToolbarItem(placement: .principal) {
+//                Text("")
+//                    .foregroundColor(.clear)
+//            }
+//            ToolbarItem(placement: .navigationBarLeading) {
+//                Button(action: {
+//                    hasPressedContinue = false
+//                }) {
+//                    HStack {
+//                        Image(systemName: "arrow.left")
+//                        Text("Back")
+//                    }
+//                }
+//            }
+//            ToolbarItem(placement: .navigationBarTrailing) {
+//                Button(action: {
+//                    withAnimation {
+//                        isLibraryOpen.toggle()
+//                    }
+//                }) {
+//                    Image(systemName: "line.3.horizontal")
+//                        .font(.title2)
+//                        .foregroundColor(.blue)
+//                }
+//                .accessibilityLabel("Main menu")
+//            }
+//        }
+//        .contentShape(Rectangle())
+//        .onTapGesture {
+//            // Dismiss keyboard when tapping outside text field
+//            UIApplication.shared.sendAction(#selector(UIResponder.resignFirstResponder), to: nil, from: nil, for: nil)
+//        }
+//        .onChange(of: selectedCharacters) { _, newValue in
+//            if newValue.contains("Just Listening") {
+//                displayMyLines = false
+//                showHints = false
+//            }
+//            updateHighlightColors()
+//        }
+//        .onChange(of: displayMyLines) { _, newValue in
+//            if newValue {
+//                showHints = false
+//            }
+//        }
+//        .onChange(of: showHints) { _, newValue in
+//            if newValue {
+//                displayMyLines = false
+//            }
+//        }
+//    }
 //
 //    // MARK: - Character Selection Section
 //    @ViewBuilder
 //    private var characterSelectionSection: some View {
 //        HStack {
-//            Text("Not Applicable")
-//            Button(action: { activeAlert = .notApplicableInfo }) {
-//                Image(systemName: "info.circle")
-//                    .foregroundColor(.blue)
-//            }
-//            .buttonStyle(PlainButtonStyle())
-//            Spacer()
-//            Toggle("", isOn: Binding(
-//                get: { selectedCharacters.contains("Not Applicable") },
-//                set: { newValue in
-//                    if newValue {
-//                        selectedCharacters = ["Not Applicable"]
-//                    } else {
-//                        selectedCharacters.remove("Not Applicable")
-//                    }
+//            Text("Just Listening")
+//                Button(action: { activeAlert = .notApplicableInfo }) {
+//                    Image(systemName: "info.circle")
+//                        .foregroundColor(.blue)
 //                }
-//            ))
-//            .labelsHidden()
-//        }
-//        .padding(.vertical, 2)
+//                .buttonStyle(PlainButtonStyle())
+//                Spacer()
+//                Toggle("", isOn: Binding(
+//                    get: { selectedCharacters.contains("Just Listening") },
+//                    set: { newValue in
+//                        if newValue {
+//                            selectedCharacters = ["Just Listening"]
+//                            // Immediately disable hints when Just Listening is selected
+//                            showHints = false
+//                            displayMyLines = false
+//                            print("⚙️ Just Listening selected - disabled hints and displayMyLines")
+//                        } else {
+//                            selectedCharacters.remove("Just Listening")
+//                            print("⚙️ Just Listening deselected")
+//                        }
+//                    }
+//                ))
+//                .labelsHidden()
+//            }
+//            .padding(.vertical, 2)
 //
 //        ForEach(characters, id: \.self) { character in
 //            Toggle(character.capitalized, isOn: Binding(
 //                get: { selectedCharacters.contains(character) },
 //                set: { newValue in
 //                    if newValue {
-//                        selectedCharacters.remove("Not Applicable")
+//                        selectedCharacters.remove("Just Listening")
 //                        selectedCharacters.insert(character)
 //                    } else {
 //                        selectedCharacters.remove(character)
@@ -711,7 +933,7 @@
 //                }
 //                Toggle("", isOn: $displayMyLines)
 //                    .labelsHidden()
-//                    .disabled(selectedCharacters.contains("Not Applicable"))
+//                    .disabled(selectedCharacters.contains("Just Listening"))
 //            }
 //        .padding(.vertical, 2)
 //        VStack(alignment: .leading, spacing: 10) {
@@ -728,7 +950,7 @@
 //            }
 //            Toggle("", isOn: $showHints)
 //                .labelsHidden()
-//                .disabled(selectedCharacters.contains("Not Applicable"))
+//                .disabled(selectedCharacters.contains("Just Listening"))
 //        }
 //        .padding(.vertical, 2)
 //    }
@@ -746,6 +968,8 @@
 //        }
 //        .listStyle(.insetGrouped)
 //    }
+//    
+//    
 //
 //    // MARK: - Character Voice Section
 //    @ViewBuilder
@@ -858,10 +1082,10 @@
 //    @ViewBuilder
 //    private func characterHighlightSection(for name: String) -> some View {
 //        let isUserCharacter = selectedCharacters.contains(where: { $0.caseInsensitiveCompare(name) == .orderedSame })
-//        let isNotApplicable = selectedCharacters.contains("Not Applicable")
+//        let isNotApplicable = selectedCharacters.contains("Just Listening")
 //        
 //        if isUserCharacter && !isNotApplicable {
-//            // User is playing this character and not "Not Applicable" - allow color selection
+//            // User is playing this character and not "Just Listening" - allow color selection
 //            ColorPicker("Highlight Color", selection: Binding(
 //                get: { characterOptions[name]?.highlight.swiftUIColor ?? .yellow },
 //                set: { newColor in
@@ -887,7 +1111,7 @@
 //                }
 //            ), supportsOpacity: false)
 //        } else {
-//            // User is not playing this character or "Not Applicable" is selected - show locked gray
+//            // User is not playing this character or "Just Listening" is selected - show locked gray
 //            HStack {
 //                Text("Highlight Color")
 //                Spacer()
@@ -905,19 +1129,119 @@
 //            }
 //        }
 //    }
+//    
+//    //MARK: - Rating View
+//    @ViewBuilder
+//    private var customRatingView: some View {
+//        ZStack {
+//            // Dark overlay background
+//            Color.black.opacity(0.3)
+//                .ignoresSafeArea()
+//            
+//            // Rating popup box
+//            VStack(spacing: 20) {
+//                // "Enjoying SceneAloud?" text
+//                Text("Enjoying SceneAloud?")
+//                    .font(.title2)
+//                    .fontWeight(.bold)
+//                    .multilineTextAlignment(.center)
+//                
+//                // "Tap a star to rate it on the App Store" text
+//                Text("Tap a star to rate it on the\nApp Store.")
+//                    .font(.body)
+//                    .multilineTextAlignment(.center)
+//                    .foregroundColor(.secondary)
+//                
+//                // Five interactive stars
+//                HStack(spacing: 10) {
+//                    ForEach(1...5, id: \.self) { index in
+//                        Button(action: {
+//                            handleStarTap(index)
+//                        }) {
+//                            Image(systemName: index <= selectedStarRating ? "star.fill" : "star")
+//                                .font(.system(size: 30))
+//                                .foregroundColor(.blue)
+//                        }
+//                        .buttonStyle(PlainButtonStyle())
+//                    }
+//                }
+//                .padding(.vertical, 10)
+//                
+//                // Bottom buttons area
+//                if hasTappedStars {
+//                    // Always show Cancel and Submit once user has tapped stars
+//                    HStack {
+//                        Button("Cancel") {
+//                            selectedStarRating = 0
+//                            hasTappedStars = false  // Reset for next time - this ensures next popup starts with "Not Now"
+//                            showRatingPrompt = false
+//                            startUsageTracking()  // Start timer for next 20 seconds
+//                        }
+//                        .font(.body)
+//                        .foregroundColor(.blue)
+//                        
+//                        Spacer()
+//                        
+//                        Button("Submit") {
+//                            openAppStoreRating()
+//                            markRatingPrompted()
+//                            showRatingPrompt = false
+//                            selectedStarRating = 0  // Reset for next time
+//                            hasTappedStars = false  // Reset for next time
+//                        }
+//                        .font(.body)
+//                        .foregroundColor(.blue)
+//                    }
+//                } else {
+//                    // Show "Not Now" only when user hasn't tapped stars yet
+//                    Button("Not Now") {
+//                        print("⭐ User selected 'Not Now' - restarting timer")
+//                        showRatingPrompt = false
+//                        startUsageTracking()
+//                    }
+//                    .font(.body)
+//                    .foregroundColor(.blue)
+//                }
+//            }
+//            .padding(30)
+//            .background(colorScheme == .dark ? Color(UIColor.systemGray5) : Color(UIColor.systemGray6))
+//            .cornerRadius(20)
+//            .shadow(radius: 10)
+//            .frame(maxWidth: 300)
+//        }
+//    }
 //
 //    // MARK: - Voice Change Handlers
 //    private func handleGenderChange(for name: String, newGender: VoiceGender) {
 //        let voicesForGender = getVoicesForGender(newGender)
 //        
-//        if let firstVoice = voicesForGender.first {
-//            let charactersUsingVoice = findCharactersUsingVoice(firstVoice.identifier, excluding: name)
+//        // Get currently used voice IDs to avoid duplicates
+//        let currentlyUsedVoiceIDs = getCurrentlyUsedVoiceIDs(excluding: name)
+//        
+//        // Find the first available voice in this gender that's not already used
+//        var selectedVoice: AVSpeechSynthesisVoice?
+//        
+//        for voice in voicesForGender {
+//            if !currentlyUsedVoiceIDs.contains(voice.identifier) {
+//                selectedVoice = voice
+//                break
+//            }
+//        }
+//        
+//        // If no unique voice found, use the first voice in the gender (allow duplicates as fallback)
+//        if selectedVoice == nil, let firstVoice = voicesForGender.first {
+//            selectedVoice = firstVoice
+//        }
+//        
+//        // Apply the selected voice
+//        if let voice = selectedVoice {
+//            let charactersUsingVoice = findCharactersUsingVoice(voice.identifier, excluding: name)
 //            
 //            if !charactersUsingVoice.isEmpty {
-//                pendingVoiceSelection = (characterName: name, voiceID: firstVoice.identifier)
+//                pendingVoiceSelection = (characterName: name, voiceID: voice.identifier)
 //                showVoiceDuplicateWarning = true
 //            } else {
-//                characterOptions[name]?.voiceID = firstVoice.identifier
+//                characterOptions[name]?.voiceID = voice.identifier
 //            }
 //        }
 //    }
@@ -998,44 +1322,85 @@
 //    // MARK: - Character Customization View
 //    @ViewBuilder
 //    private var characterCustomizationView: some View {
-//        HamburgerOverlay(showSideMenu: $isLibraryOpen) {
-//            VStack {
-//                characterCustomizationList
-//                characterCustomizationButtonSection
-//            }
-//            .navigationTitle("Character Customization")
-//            .navigationBarTitleDisplayMode(.inline)
-//            .toolbar {
-//                ToolbarItem(placement: .navigationBarLeading) {
-//                    Button {
-//                        pauseSpeechForNavigation()
-//                        stopVoicePreview()
-//                        isShowingCharacterCustomization = false
-//                    } label: {
-//                        Label("Back", systemImage: "arrow.left")
+//        VStack {
+//            // Move the List and title into a single ScrollView structure
+//            List {
+//                // Custom title as the first section
+//                Section {
+//                    Text("Character Customization")
+//                        .font(.largeTitle)
+//                        .bold()
+//                        .lineLimit(1)
+//                        .minimumScaleFactor(0.8)
+//                        .padding(.top, 10)
+//                        .padding(.bottom, 5)
+//                        .listRowBackground(Color.clear)
+//                        .listRowInsets(EdgeInsets(top: 0, leading: 16, bottom: 0, trailing: 16))
+//                }
+//                
+//                // Character sections
+//                ForEach(characters, id: \.self) { name in
+//                    Section(header: Text(name.capitalized)) {
+//                        characterVoiceSection(for: name)
+//                        characterHighlightSection(for: name)
 //                    }
 //                }
 //            }
-//            .onAppear {
-//                ensureCharacterOptions()
-//                updateHighlightColors()
+//            .listStyle(.insetGrouped)
+//            
+//            characterCustomizationButtonSection
+//        }
+//        .navigationTitle("")
+//        .navigationBarTitleDisplayMode(.inline)
+//        .toolbar {
+//            // Add invisible title to enable navigation bar
+//            ToolbarItem(placement: .principal) {
+//                Text("")
+//                    .foregroundColor(.clear)
 //            }
-//            .onDisappear {
-//                stopVoicePreview()
+//            ToolbarItem(placement: .navigationBarLeading) {
+//                Button {
+//                    pauseSpeechForNavigation()
+//                    stopVoicePreview()
+//                    isShowingCharacterCustomization = false
+//                } label: {
+//                    HStack {
+//                        Image(systemName: "arrow.left")
+//                        Text("Back")
+//                    }
+//                }
 //            }
-//            .alert("Voice Already In Use", isPresented: $showVoiceDuplicateWarning) {
-//                voiceDuplicateAlertButtons
-//            } message: {
-//                voiceDuplicateAlertMessage
-//            }
-//            .alert("Color Already In Use", isPresented: $showColorDuplicateWarning) {
-//                colorDuplicateAlertButtons
-//            } message: {
-//                colorDuplicateAlertMessage
+//            ToolbarItem(placement: .navigationBarTrailing) {
+//                Button(action: {
+//                    withAnimation {
+//                        isLibraryOpen.toggle()
+//                    }
+//                }) {
+//                    Image(systemName: "line.3.horizontal")
+//                        .font(.title2)
+//                        .foregroundColor(.blue)
+//                }
+//                .accessibilityLabel("Main menu")
 //            }
 //        }
+//        .onAppear {
+//            ensureCharacterOptions()
+//            updateHighlightColors()
+//        }
+//        .onDisappear {
+//            stopVoicePreview()
+//        }
+//        .alert("Voice Already In Use", isPresented: $showVoiceDuplicateWarning) {
+//            voiceDuplicateAlertButtons
+//        } message: {
+//            voiceDuplicateAlertMessage
+//        }
+//        .alert("Color Already In Use", isPresented: $showColorDuplicateWarning) {
+//            colorDuplicateAlertButtons
+//        } message: {
+//            colorDuplicateAlertMessage
+//        }
 //    }
-//
 //    
 //    // MARK: - Character Customization Button Section
 //    @ViewBuilder
@@ -1061,120 +1426,144 @@
 //    // MARK: - Starting Line Selection View
 //    @ViewBuilder
 //    private var startingLineSelectionView: some View {
-//        HamburgerOverlay(showSideMenu: $isLibraryOpen) {
-//            VStack(spacing: 0) {
-//                // Description text at top
-//                VStack(spacing: 10) {
-//                    Text("Please select the line you would like to start rehearsing from.")
-//                        .font(.title2)
-//                        .multilineTextAlignment(.center)
-//                        .padding(.horizontal, 20)
-//                        .padding(.top, 10)
-//                }
-//                .background(Color(UIColor.systemBackground))
-//                
-//                // Script display
-//                ScrollView {
-//                    VStack(alignment: .leading, spacing: 10) {
-//                        ForEach(dialogue.indices, id: \.self) { index in
-//                            let entry = dialogue[index]
-//                            let isSelected = selectedStartingLineIndex == index
-//                            let isUserCharacter = selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame })
-//                            let characterColor = colorForCharacter(entry.character)
-//                            
-//                            VStack(alignment: .leading, spacing: 4) {
-//                                Text(entry.character)
-//                                    .font(.headline)
-//                                    .foregroundColor(.primary)
+//        VStack(spacing: 0) {
+//            // Script display with title inside the ScrollView
+//            ScrollView {
+//                VStack(alignment: .leading, spacing: 10) {
+//                    // Custom title and description at the top of scrollable content
+//                    VStack(spacing: 10) {
+//                        Text("Select Starting Line")
+//                            .font(.largeTitle)
+//                            .bold()
+//                            .padding(.top, 20)
+//                        
+//                        Text("Please select the line you would like to start rehearsing from.")
+//                            .font(.title2)
+//                            .multilineTextAlignment(.center)
+//                            .padding(.horizontal, 20)
+//                            .padding(.bottom, 20)
+//                    }
+//                    
+//                    // Script lines
+//                    ForEach(dialogue.indices, id: \.self) { index in
+//                        let entry = dialogue[index]
+//                        let isSelected = selectedStartingLineIndex == index
+//                        let isUserCharacter = selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame })
+//                        let characterColor = colorForCharacter(entry.character)
+//                        
+//                        VStack(alignment: .leading, spacing: 4) {
+//                            Text(entry.character)
+//                                .font(.headline)
+//                                .foregroundColor(.primary)
+//                                .frame(maxWidth: .infinity, alignment: .leading)
 //
-//                                Text(entry.line)
-//                                    .font(.body)
-//                                    .padding(5)
-//                                    .background(
-//                                        isSelected ?
-//                                        Color.green.opacity(0.7) :
-//                                        (isUserCharacter && !selectedCharacters.contains("Not Applicable") ?
-//                                         characterColor.opacity(0.3) :
-//                                         Color.clear)
-//                                    )
-//                                    .cornerRadius(5)
-//                            }
-//                            .padding(.bottom, 5)
-//                            .id(index)
-//                            .contentShape(Rectangle()) // Makes entire area tappable
-//                            .onTapGesture {
-//                                if selectedStartingLineIndex == index {
-//                                    // Tapping the same line again deselects it
-//                                    selectedStartingLineIndex = nil
+//                            Text(entry.line)
+//                                .font(.body)
+//                                .frame(maxWidth: .infinity, alignment: .leading)
+//                                .padding(5)
+//                                .background(
+//                                    isSelected ?
+//                                    Color.green.opacity(0.7) :
+//                                    (isUserCharacter && !selectedCharacters.contains("Not Applicable") ?
+//                                     characterColor.opacity(0.3) :
+//                                     Color.clear)
+//                                )
+//                                .cornerRadius(5)
+//                        }
+//                        .frame(maxWidth: .infinity, alignment: .leading)
+//                        .padding(.bottom, 5)
+//                        .id(index)
+//                        .contentShape(Rectangle()) // Makes entire area tappable
+//                        .onTapGesture {
+//                            if selectedStartingLineIndex == index {
+//                                // Tapping the same line again deselects it
+//                                selectedStartingLineIndex = nil
+//                            } else {
+//                                // Check if this is the last line
+//                                if index == dialogue.count - 1 {
+//                                    // Show warning for last line
+//                                    showLastLineWarning = true
+//                                    selectedStartingLineIndex = index // Still select it, but show warning
 //                                } else {
-//                                    // Check if this is the last line
-//                                    if index == dialogue.count - 1 {
-//                                        // Show warning for last line
-//                                        showLastLineWarning = true
-//                                        selectedStartingLineIndex = index // Still select it, but show warning
-//                                    } else {
-//                                        // Select this line normally
-//                                        selectedStartingLineIndex = index
-//                                    }
+//                                    // Select this line normally
+//                                    selectedStartingLineIndex = index
 //                                }
 //                            }
 //                        }
 //                    }
-//                    .padding()
 //                }
-//                .background(Color(UIColor.systemBackground))
-//                
-//                // Continue button at bottom
-//                VStack {
-//                    Button(action: {
-//                        if let startingIndex = selectedStartingLineIndex {
-//                            startingLineIndex = startingIndex
-//                            currentUtteranceIndex = startingIndex
-//                            hasSetStartingLine = true
-//                        }
-//                        isCharacterSelected = true
-//                    }) {
-//                        Text("Continue")
-//                            .font(.headline)
-//                            .frame(maxWidth: .infinity)
-//                            .padding()
-//                            .background(selectedStartingLineIndex != nil ? Color.blue : Color.gray)
-//                            .foregroundColor(.white)
-//                            .cornerRadius(10)
+//                .frame(maxWidth: .infinity, alignment: .leading)
+//                .padding(.horizontal, 20)
+//            }
+//            .background(Color(UIColor.systemBackground))
+//            
+//            // Continue button at bottom (stays fixed)
+//            VStack {
+//                Button(action: {
+//                    if let startingIndex = selectedStartingLineIndex {
+//                        startingLineIndex = startingIndex
+//                        currentUtteranceIndex = startingIndex
+//                        hasSetStartingLine = true
 //                    }
-//                    .disabled(selectedStartingLineIndex == nil)
-//                    .padding(.horizontal, 20)
-//                    .padding(.bottom, 20)
-//                    .padding(.top, 10)
+//                    isCharacterSelected = true
+//                }) {
+//                    Text("Continue")
+//                        .font(.headline)
+//                        .frame(maxWidth: .infinity)
+//                        .padding()
+//                        .background(selectedStartingLineIndex != nil ? Color.blue : Color.gray)
+//                        .foregroundColor(.white)
+//                        .cornerRadius(10)
 //                }
-//                .background(Color(UIColor.systemBackground))
+//                .disabled(selectedStartingLineIndex == nil)
+//                .padding(.horizontal, 20)
+//                .padding(.bottom, 20)
+//                .padding(.top, 10)
 //            }
-//            .navigationTitle("Select Starting Line")
-//            .navigationBarTitleDisplayMode(.inline)
-//            .toolbar {
-//                ToolbarItem(placement: .navigationBarLeading) {
-//                    Button(action: {
-//                        selectedStartingLineIndex = nil
-//                        hasSetStartingLine = false
-//                        isShowingStartingLineSelection = false
-//                    }) {
-//                        HStack {
-//                            Image(systemName: "arrow.left")
-//                            Text("Back")
-//                        }
+//            .background(Color(UIColor.systemBackground))
+//        }
+//        .navigationTitle("")
+//        .navigationBarTitleDisplayMode(.inline)
+//        .toolbar {
+//            // Add invisible title to enable navigation bar
+//            ToolbarItem(placement: .principal) {
+//                Text("")
+//                    .foregroundColor(.clear)
+//            }
+//            ToolbarItem(placement: .navigationBarLeading) {
+//                Button(action: {
+//                    selectedStartingLineIndex = nil
+//                    hasSetStartingLine = false
+//                    isShowingStartingLineSelection = false
+//                }) {
+//                    HStack {
+//                        Image(systemName: "arrow.left")
+//                        Text("Back")
 //                    }
 //                }
 //            }
-//            .alert("Last Line Selected", isPresented: $showLastLineWarning) {
-//                Button("Cancel") {
-//                    selectedStartingLineIndex = nil // Deselect the last line
+//            ToolbarItem(placement: .navigationBarTrailing) {
+//                Button(action: {
+//                    withAnimation {
+//                        isLibraryOpen.toggle()
+//                    }
+//                }) {
+//                    Image(systemName: "line.3.horizontal")
+//                        .font(.title2)
+//                        .foregroundColor(.blue)
 //                }
-//                Button("Continue Anyway") {
-//                    // Keep the selection, user confirmed they want to rehearse the last line
-//                }
-//            } message: {
-//                Text("Error: You have selected the very last line of the script. Are you sure you want to rehearse that?")
+//                .accessibilityLabel("Main menu")
 //            }
+//        }
+//        .alert("Last Line Selected", isPresented: $showLastLineWarning) {
+//            Button("Cancel") {
+//                selectedStartingLineIndex = nil // Deselect the last line
+//            }
+//            Button("Continue Anyway") {
+//                // Keep the selection, user confirmed they want to rehearse the last line
+//            }
+//        } message: {
+//            Text("Error: You have selected the very last line of the script. Are you sure you want to rehearse that?")
 //        }
 //    }
 //    
@@ -1182,64 +1571,86 @@
 //    // MARK: - Script Reading View
 //    @ViewBuilder
 //    private var scriptReadingView: some View {
-//            HamburgerOverlay(showSideMenu: $isLibraryOpen) {
-//                VStack {
-//                    ScrollViewReader { proxy in
-//                        ScrollView {
-//                            VStack(alignment: .leading, spacing: 10) {
-//                                ForEach(dialogue.indices, id: \.self) { index in
-//                                    let entry = dialogue[index]
-//                                    
-//                                    // Only show lines from the starting point onwards
-//                                    if index >= startingLineIndex {
-//                                        if displayLinesAsRead {
-//                                            if index <= currentUtteranceIndex {
-//                                                lineView(for: entry, at: index)
-//                                            }
-//                                        } else {
-//                                            lineView(for: entry, at: index)
-//                                        }
+//        VStack {
+//            ScrollViewReader { proxy in
+//                ScrollView {
+//                    VStack(alignment: .leading, spacing: 10) {
+//                        ForEach(dialogue.indices, id: \.self) { index in
+//                            let entry = dialogue[index]
+//                            
+//                            // Only show lines from the starting point onwards
+//                            if index >= startingLineIndex {
+//                                if displayLinesAsRead {
+//                                    if index <= currentUtteranceIndex {
+//                                        lineView(for: entry, at: index)
 //                                    }
-//                                }
-//                            }
-//                            .frame(maxWidth: .infinity, alignment: .leading)
-//                            .padding()
-//                            .onChange(of: currentUtteranceIndex) { _ in
-//                                withAnimation {
-//                                    proxy.scrollTo(currentUtteranceIndex, anchor: .top)
+//                                } else {
+//                                    lineView(for: entry, at: index)
 //                                }
 //                            }
 //                        }
-//                        .background(Color(UIColor.systemBackground))
 //                    }
-//                    .background(Color(UIColor.systemBackground))
+//                    .frame(maxWidth: .infinity, alignment: .leading)  // Ensure left alignment
+//                    .padding()
+//                    .onChange(of: currentUtteranceIndex) { _ in
+//                        withAnimation {
+//                            proxy.scrollTo(currentUtteranceIndex, anchor: .top)
+//                        }
+//                    }
+//                }
+//                .background(Color(UIColor.systemBackground))
+//            }
+//            .background(Color(UIColor.systemBackground))
 //
-//                    controlButtonsSection
-//                }
-//                .navigationTitle("SceneAloud")
-//                .navigationBarTitleDisplayMode(.inline)
-//                .toolbar {
-//                    ToolbarItem(placement: .navigationBarLeading) {
-//                        Button(action: {
-//                            // Auto-pause speech when going back
-//                            pauseSpeechForNavigation()
-//                            // Go back to starting line selection
-//                            isCharacterSelected = false
-//                        }) {
-//                            HStack {
-//                                Image(systemName: "arrow.left")
-//                                Text("Back")
-//                            }
-//                        }
-//                    }
-//                }
-//                .onAppear(perform: initializeSpeech)
-//                .onDisappear {
-//                    // Auto-pause when view disappears for any reason
+//            controlButtonsSection
+//        }
+//        .navigationTitle(scriptName.isEmpty ? "SceneAloud" : scriptName)
+//        .navigationBarTitleDisplayMode(.inline)
+//        .toolbar {
+//            ToolbarItem(placement: .navigationBarLeading) {
+//                Button(action: {
+//                    // Auto-pause speech when going back
 //                    pauseSpeechForNavigation()
+//                    // Go back to starting line selection
+//                    isCharacterSelected = false
+//                }) {
+//                    HStack {
+//                        Image(systemName: "arrow.left")
+//                        Text("Back")
+//                    }
 //                }
 //            }
+//            ToolbarItem(placement: .navigationBarTrailing) {
+//                Button(action: {
+//                    withAnimation {
+//                        isLibraryOpen.toggle()
+//                    }
+//                }) {
+//                    Image(systemName: "line.3.horizontal")
+//                        .font(.title2)
+//                }
+//                .accessibilityLabel("Main menu")
+//            }
 //        }
+//        .onAppear {
+//            initializeSpeech()
+//            startUsageTracking() // Start tracking usage time
+//        }
+//        .onDisappear {
+//            // Auto-pause when view disappears for any reason
+//            pauseSpeechForNavigation()
+//            stopUsageTracking() // Stop tracking when leaving script view
+//        }
+//        .onDisappear {
+//            // Auto-pause when view disappears for any reason
+//            pauseSpeechForNavigation()
+//        }
+//        .overlay {
+//            if showRatingPrompt {
+//                customRatingView
+//            }
+//        }
+//    }
 //    
 //    private func pauseSpeechForNavigation() {
 //            if synthesizer.isSpeaking {
@@ -1322,33 +1733,39 @@
 //                            Image(systemName: "lightbulb")
 //                                .font(.body)
 //                            
-//                            // Button text changes based on state
-//                            if currentUtteranceIndex < dialogue.count {
+//                            // Button text logic: only change text for user lines with specific conditions
+//                            if currentUtteranceIndex < dialogue.count && isUserLine {
 //                                let currentLine = dialogue[currentUtteranceIndex]
 //                                let words = currentLine.line.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
 //                                
+//                                // Show "Reveal My Line" for short lines (5 words or fewer)
 //                                if words.count <= 5 {
 //                                    Text("Reveal My Line")
 //                                        .font(.body)
-//                                } else if shouldShowFullLineButton(for: currentLine.line, clickCount: hintClickCount) {
+//                                }
+//                                // Show "Reveal Full Line" only after 2 hints on longer lines
+//                                else if shouldShowFullLineButton(for: currentLine.line, clickCount: hintClickCount) {
 //                                    Text("Reveal Full Line")
 //                                        .font(.body)
-//                                } else {
+//                                }
+//                                // Default to "Hint" for all other cases
+//                                else {
 //                                    Text("Hint")
 //                                        .font(.body)
 //                                }
 //                            } else {
+//                                // Always show "Hint" when not on user line
 //                                Text("Hint")
 //                                    .font(.body)
 //                            }
 //                        }
-//                        .foregroundColor(isUserLine ? .yellow : .gray)
+//                        .foregroundColor(getHintButtonColor())
 //                        .padding(.horizontal, 16)
 //                        .padding(.vertical, 8)
-//                        .background((isUserLine ? Color.yellow : Color.gray).opacity(0.1))
+//                        .background(getHintButtonColor().opacity(0.1))
 //                        .cornerRadius(8)
 //                    }
-//                    .disabled(!isUserLine)
+//                    .disabled(getHintButtonDisabled())
 //                    
 //                    // Restart Line Button
 //                    Button(action: {
@@ -1394,6 +1811,44 @@
 //    // MARK: - Alert Helper
 //    private func alertForType(_ alert: AlertType) -> Alert {
 //        switch alert {
+//        case .hintsInfo:
+//            return Alert(
+//                title: Text("Hints"),
+//                message: Text("When turned on, 'Hints' allows you to ask for the first few words of your line to be revealed if you are having trouble remembering it."),
+//                dismissButton: .default(Text("OK")) {
+//                    activeAlert = nil
+//                }
+//            )
+//        case .scriptFormatError:
+//            return Alert(
+//                title: Text("Script Format Error"),
+//                message: Text("Your script could not be processed. Please make sure each line follows the format:\n\nCharacter Name: Line of dialogue\n\nFor example:\nJOHN: Hello there!\nMARY: How are you?"),
+//                dismissButton: .default(Text("OK")) {
+//                    // For uploaded files, reset to upload page
+//                    if hasUploadedFile && !uploadedFileName.contains("Typed Script") {
+//                        uploadedFileName = ""
+//                        fileContent = ""
+//                        selectedFileURL = nil
+//                        dialogue = []
+//                        characters = []
+//                        selectedCharacters = []
+//                        hasUploadedFile = false
+//                        hasPressedContinue = false
+//                    }
+//                    // For typed scripts, preserve fileContent and stay on typing page
+//                    if !hasUploadedFile || uploadedFileName.contains("Typed Script") {
+//                        // Don't clear fileContent - just reset the upload flags
+//                        uploadedFileName = ""
+//                        dialogue = []
+//                        characters = []
+//                        selectedCharacters = []
+//                        hasUploadedFile = false
+//                        hasPressedContinue = false
+//                    }
+//                    activeAlert = nil
+//                }
+//            )
+//            
 //        case .noCharacterSelected:
 //            return Alert(
 //                title: Text("No Character Selected"),
@@ -1412,8 +1867,8 @@
 //            )
 //        case .notApplicableInfo:
 //            return Alert(
-//                title: Text("Not Applicable"),
-//                message: Text("When 'Not Applicable' is selected, you will just be listening to the script and will not be participating."),
+//                title: Text("Just Listening"),
+//                message: Text("When 'Just Listening' is selected, you will just be listening to the script and will not be participating."),
 //                dismissButton: .default(Text("OK")) {
 //                    activeAlert = nil
 //                }
@@ -1426,10 +1881,18 @@
 //                    activeAlert = nil
 //                }
 //            )
-//        case .hintsInfo:
+//        case .emptyScriptName:
 //            return Alert(
-//                title: Text("Hints"),
-//                message: Text("When turned on, 'Hints' allows you to ask for the first few words of your line to be revealed if you are having trouble remembering it."),
+//                title: Text("Script Name Required"),
+//                message: Text("Please enter a name for your script before continuing."),
+//                dismissButton: .default(Text("OK")) {
+//                    activeAlert = nil
+//                }
+//            )
+//        case .emptyScriptNameAndNoCharacter: // NEW
+//            return Alert(
+//                title: Text("Missing Information"),
+//                message: Text("Please enter a script name and select at least one character before continuing."),
 //                dismissButton: .default(Text("OK")) {
 //                    activeAlert = nil
 //                }
@@ -1456,9 +1919,10 @@
 //                Text(entry.character)
 //                    .font(.headline)
 //                    .foregroundColor(.primary)
+//                    .frame(maxWidth: .infinity, alignment: .leading)
 //
-//                if selectedCharacters.contains("Not Applicable") {
-//                    // When "Not Applicable" is selected, check THIS character's color individually
+//                if selectedCharacters.contains("Just Listening") {
+//                    // When "Just Listening" is selected, check THIS character's color individually
 //                    let characterColor = colorForCharacter(entry.character)
 //                    let isThisCharacterGray = isColorGray(characterColor)
 //                    
@@ -1544,6 +2008,7 @@
 //                    Text(entry.line)
 //                        .font(.body)
 //                        .padding(5)
+//                        .frame(maxWidth: .infinity, alignment: .leading)
 //                        .background(
 //                            index == currentUtteranceIndex ?
 //                            characterColor.opacity(0.7) :
@@ -1552,6 +2017,7 @@
 //                        .cornerRadius(5)
 //                }
 //            }
+//            .frame(maxWidth: .infinity, alignment: .leading)
 //            .padding(.bottom, 5)
 //            .id(index)
 //        }
@@ -1598,8 +2064,8 @@
 //    
 //    // MARK: - Voice Management System
 //    private func assignUniqueVoices() {
-//        // Get all available voices from our curated lists
-//        let allCuratedVoices = getVoicesForGender(.male) + getVoicesForGender(.female) + getVoicesForGender(.androgynous)
+//        // Get all available male voices as default
+//        let maleVoices = getVoicesForGender(.male)
 //        
 //        var voiceIndex = 0
 //        
@@ -1608,20 +2074,15 @@
 //            if let currentVoiceID = characterOptions[name]?.voiceID,
 //               !currentVoiceID.isEmpty,
 //               AVSpeechSynthesisVoice(identifier: currentVoiceID) != nil {
-//                // Character already has a valid voice, keep it (even if duplicate)
+//                // Character already has a valid voice, keep it
 //                continue
 //            } else {
-//                // Character needs a new voice - assign next available from curated list
-//                while voiceIndex < allCuratedVoices.count {
-//                    let voice = allCuratedVoices[voiceIndex]
+//                // Character needs a new voice - assign next available male voice
+//                if voiceIndex < maleVoices.count {
+//                    characterOptions[name]?.voiceID = maleVoices[voiceIndex].identifier
 //                    voiceIndex += 1
-//                    
-//                    characterOptions[name]?.voiceID = voice.identifier
-//                    break
-//                }
-//                
-//                // Final fallback if we somehow run out of curated voices
-//                if let currentVoiceID = characterOptions[name]?.voiceID, currentVoiceID.isEmpty {
+//                } else {
+//                    // Fallback if we run out of male voices
 //                    let fallbackVoice = getDefaultVoiceID()
 //                    characterOptions[name]?.voiceID = fallbackVoice
 //                }
@@ -1687,7 +2148,7 @@
 //        ]
 //    }
 //
-//    private var androgynousVoiceKeys: [String] {
+//    private var otherVoiceKeys: [String] {
 //        return [
 //            "bahh en-us", "jester en-us", "organ en-us", "cellos en-us",
 //            "zarvox en-us", "whisper en-us", "good news en-us", "bad news en-us",
@@ -1746,7 +2207,7 @@
 //        }
 //        
 //        // Fallback to any curated voice
-//        let curatedVoices = getVoicesForGender(.female) + getVoicesForGender(.male) + getVoicesForGender(.androgynous)
+//        let curatedVoices = getVoicesForGender(.female) + getVoicesForGender(.male) + getVoicesForGender(.other)
 //        if let firstCurated = curatedVoices.first {
 //            return firstCurated.identifier
 //        }
@@ -1778,8 +2239,8 @@
 //            return .male
 //        } else if femaleVoiceKeys.contains(voiceKey) {
 //            return .female
-//        } else if androgynousVoiceKeys.contains(voiceKey) {
-//            return .androgynous
+//        } else if otherVoiceKeys.contains(voiceKey) {
+//            return .other
 //        }
 //        
 //        // Default to female if voice not found in curated lists
@@ -1797,8 +2258,8 @@
 //            targetVoiceKeys = maleVoiceKeys
 //        case .female:
 //            targetVoiceKeys = femaleVoiceKeys
-//        case .androgynous:
-//            targetVoiceKeys = androgynousVoiceKeys
+//        case .other:
+//            targetVoiceKeys = otherVoiceKeys
 //        }
 //        
 //        // Find matching voices from available system voices
@@ -1833,8 +2294,8 @@
 //    private func findCharactersUsingColor(_ color: Color, excluding excludeName: String) -> [String] {
 //        var charactersUsingColor: [String] = []
 //        
-//        // Only check among characters the user is playing (excluding "Not Applicable")
-//        let userCharacters = selectedCharacters.filter { $0 != "Not Applicable" }
+//        // Only check among characters the user is playing (excluding "Just Listening")
+//        let userCharacters = selectedCharacters.filter { $0 != "Just Listening" }
 //        
 //        for characterName in userCharacters {
 //            if characterName != excludeName,
@@ -2045,33 +2506,37 @@
 //    private func skipBackWhilePaused() {
 //        print("⏸️ Skipping back while paused - currentIndex: \(currentUtteranceIndex), startingIndex: \(startingLineIndex)")
 //        
-//        // Stop any speech
-//        if synthesizer.isSpeaking {
-//            synthesizer.stopSpeaking(at: .immediate)
-//            print("🛑 Stopped speaking")
-//        }
+//        // DON'T stop speech here - we want to be able to resume
+//        // Just clear delegates to prevent old ones from firing
 //        synthesizer.delegate = nil
 //        speechDelegate = nil
+//        print("⏸️ Cleared delegates but kept speech paused")
 //        
 //        // Move index back OR stay at current if at beginning
 //        if currentUtteranceIndex > startingLineIndex {
 //            currentUtteranceIndex -= 1
 //            resetHintForNewLine()
-//            print("⬅️ Moved back to index: \(currentUtteranceIndex)")
+//            print("⏸️ Moved back to index: \(currentUtteranceIndex)")
 //        } else {
-//            print("🔄 At starting line (\(startingLineIndex)), staying at current line ready to restart at index: \(currentUtteranceIndex)")
-//            // Stay at same index - when user presses play it will restart this line
+//            print("⏸️ At starting line (\(startingLineIndex)), staying at current line ready to restart at index: \(currentUtteranceIndex)")
+//            resetHintForNewLine()
 //        }
 //        
 //        // Update states
 //        updateProgress()
 //        updateUserLineState()
 //        
-//        // Stay paused
+//        // Stay paused - but we need to prepare for the case where user hits unpause
+//        // The synthesizer should be stopped and ready to start the new line
+//        if synthesizer.isSpeaking {
+//            synthesizer.stopSpeaking(at: .immediate)
+//            print("⏸️ Stopped current speech to prepare for new line")
+//        }
+//        
 //        isPaused = true
 //        isSpeaking = false
 //        
-//        print("✅ Paused skip back complete - index: \(currentUtteranceIndex), isPaused: \(isPaused)")
+//        print("⏸️ Paused skip back complete - index: \(currentUtteranceIndex), isPaused: \(isPaused)")
 //    }
 //
 //    private func skipForwardWhilePaused() {
@@ -2125,8 +2590,8 @@
 //            resetHintForNewLine()
 //            print("⬅️ Moved back to index: \(currentUtteranceIndex)")
 //        } else {
-//            print("🔄 At starting line (\(startingLineIndex)), will restart current line at index: \(currentUtteranceIndex)")
-//            // Stay at same index but we'll restart it below
+//            print("🔄 Already at starting line (\(startingLineIndex)), will restart current line at index: \(currentUtteranceIndex)")
+//            resetHintForNewLine()
 //        }
 //        
 //        // Update states
@@ -2138,7 +2603,7 @@
 //        isSpeaking = false
 //        
 //        if !isUserLine {
-//            print("🎬 About to call speakLineForUnpausedSkip() for restart/previous line")
+//            print("🎬 About to call speakLineForUnpausedSkip() for index: \(currentUtteranceIndex)")
 //            speakLineForUnpausedSkip()
 //            print("🎬 Called speakLineForUnpausedSkip()")
 //        } else {
@@ -2147,42 +2612,54 @@
 //        
 //        print("✅ Unpaused skip back complete - index: \(currentUtteranceIndex), speaking: \(!isUserLine)")
 //    }
-//
+//    
 //    private func skipForwardWhileUnpaused() {
-//        print("▶️ Skipping forward while unpaused")
+//        print("➡️ === skipForwardWhileUnpaused() ENTRY ===")
+//        print("➡️ currentUtteranceIndex: \(currentUtteranceIndex)")
+//        print("➡️ synthesizer.isSpeaking: \(synthesizer.isSpeaking)")
 //        
 //        // Stop current speech
 //        if synthesizer.isSpeaking {
 //            synthesizer.stopSpeaking(at: .immediate)
+//            print("➡️ Stopped speaking")
 //        }
 //        synthesizer.delegate = nil
 //        speechDelegate = nil
+//        print("➡️ Cleared delegates")
 //        
 //        // Move index forward
+//        print("➡️ Moving forward from \(currentUtteranceIndex) to \(currentUtteranceIndex + 1)")
 //        currentUtteranceIndex += 1
 //        resetHintForNewLine()
 //        print("➡️ Moved forward to index: \(currentUtteranceIndex)")
 //        
 //        // Check end of script
 //        if currentUtteranceIndex >= dialogue.count {
-//            print("📜 Reached end of script")
+//            print("➡️ Reached end of script")
 //            showScriptCompletionAlert = true
 //            return
 //        }
 //        
 //        // Update states
+//        print("➡️ About to call updateProgress()")
 //        updateProgress()
+//        print("➡️ About to call updateUserLineState()")
 //        updateUserLineState()
+//        print("➡️ After updateUserLineState(), isUserLine: \(isUserLine)")
 //        
 //        // Start speaking immediately if not user line
 //        isPaused = false
 //        isSpeaking = false
+//        print("➡️ Set isPaused = false, isSpeaking = false")
 //        
 //        if !isUserLine {
+//            print("➡️ Not user line - about to call speakLineForUnpausedSkip()")
 //            speakLineForUnpausedSkip()
+//            print("➡️ Called speakLineForUnpausedSkip()")
 //        }
 //        
-//        print("✅ Unpaused skip forward complete - index: \(currentUtteranceIndex), speaking: \(!isUserLine)")
+//        print("➡️ === skipForwardWhileUnpaused() EXIT ===")
+//        print("➡️ Final state - index: \(currentUtteranceIndex), isUserLine: \(isUserLine), isPaused: \(isPaused)")
 //    }
 //    
 //    // Special speech function ONLY for unpaused skips
@@ -2195,28 +2672,32 @@
 //        let entry = dialogue[currentUtteranceIndex]
 //        print("🎭 Speaking after unpaused skip - character: \(entry.character), index: \(currentUtteranceIndex)")
 //        
-//        // Give synthesizer a moment to settle after stop/clear operations
-//        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-//            let utterance = AVSpeechUtterance(string: entry.line)
-//
-//            if let id = self.characterOptions[entry.character]?.voiceID,
-//               let voice = AVSpeechSynthesisVoice(identifier: id) {
-//                utterance.voice = voice
-//            }
-//            utterance.postUtteranceDelay = 0.5
-//
-//            // Set up normal delegate
-//            let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
-//                print("🔔 Speech delegate fired normally - incrementing from \(currentUtteranceIndex)")
-//                currentUtteranceIndex += 1
-//                updateProgress()
-//                startNextLine()
-//            }
-//            self.speechDelegate = delegate
-//            self.synthesizer.delegate = delegate
-//            self.synthesizer.speak(utterance)
+//        // Force UI update BEFORE starting speech with a longer delay
+//        DispatchQueue.main.async {
+//            // This forces SwiftUI to update the view with the new currentUtteranceIndex
+//            print("🔄 Forcing UI update for index: \(self.currentUtteranceIndex)")
 //            
-//            print("🗣️ Started speaking line after short delay")
+//            // Then start speech after UI has had time to update
+//            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+//                let utterance = AVSpeechUtterance(string: entry.line)
+//
+//                if let id = self.characterOptions[entry.character]?.voiceID,
+//                   let voice = AVSpeechSynthesisVoice(identifier: id) {
+//                    utterance.voice = voice
+//                }
+//                utterance.postUtteranceDelay = 0.5
+//
+//                let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
+//                    currentUtteranceIndex += 1
+//                    updateProgress()
+//                    startNextLine()
+//                }
+//                self.speechDelegate = delegate
+//                self.synthesizer.delegate = delegate
+//                self.synthesizer.speak(utterance)
+//                
+//                print("🗣️ Started speaking line after UI update delay")
+//            }
 //        }
 //    }
 //    
@@ -2229,7 +2710,7 @@
 //        }
 //        
 //        let entry = dialogue[currentUtteranceIndex]
-//        if selectedCharacters.contains("Not Applicable") {
+//        if selectedCharacters.contains("Just Listening") {
 //            isUserLine = false
 //        } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
 //            isUserLine = true
@@ -2297,6 +2778,27 @@
 //    }
 //    
 //    // MARK: - Hint Helper Functions
+//    
+//    private func getHintButtonColor() -> Color {
+//        // If not user's line, always gray
+//        if !isUserLine {
+//            return .gray
+//        }
+//        
+//        // If user's line but full line already revealed, gray it out
+//        if hintClickCount >= 999 {
+//            return .gray
+//        }
+//        
+//        // Otherwise, normal yellow color
+//        return .yellow
+//    }
+//
+//    private func getHintButtonDisabled() -> Bool {
+//        // Disabled if not user's line OR if full line already revealed
+//        return !isUserLine || hintClickCount >= 999
+//    }
+//    
 //    private func getHintText(for line: String, clickCount: Int) -> String {
 //        let words = line.components(separatedBy: .whitespacesAndNewlines).filter { !$0.isEmpty }
 //        
@@ -2426,6 +2928,128 @@
 //
 //        return convertedLines.joined(separator: "\n")
 //    }
+//    
+//    // MARK: - Rating System Functions
+//    
+//    private func openAppStoreRating() {
+//        // This will open the App Store rating page for your app
+//        // You'll need to replace "YOUR_APP_ID" with your actual App Store app ID
+//        if let url = URL(string: "https://apps.apple.com/app/idYOUR_APP_ID?action=write-review") {
+//            UIApplication.shared.open(url)
+//        }
+//        print("⭐ Opened App Store rating page")
+//    }
+//    
+//    private func startUsageTracking() {
+//        // FOR TESTING ONLY - remove this line in production
+//        resetRatingStatusForTesting()
+//        
+//        // Check if we've already prompted for rating
+//        hasPromptedForRating = UserDefaults.standard.bool(forKey: "hasPromptedForRating")
+//        
+//        print("⭐ hasPromptedForRating: \(hasPromptedForRating)")
+//        
+//        // Only start tracking if we haven't prompted yet
+//        guard !hasPromptedForRating else {
+//            print("⭐ Rating already prompted - skipping usage tracking")
+//            return
+//        }
+//        
+//        print("⭐ Starting usage tracking - will prompt after \(ratingPromptDelay) seconds")
+//        usageStartTime = Date()
+//        
+//        // Start timer that checks every 5 seconds
+//        appUsageTimer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { _ in
+//            self.checkUsageTime()
+//        }
+//        print("⭐ Timer started successfully")
+//    }
+//
+//    private func stopUsageTracking() {
+//        print("⭐ Stopping usage tracking")
+//        appUsageTimer?.invalidate()
+//        appUsageTimer = nil
+//        usageStartTime = nil
+//    }
+//
+//    private func checkUsageTime() {
+//        guard let startTime = usageStartTime else {
+//            print("⭐ No start time found")
+//            return
+//        }
+//        
+//        let currentUsage = Date().timeIntervalSince(startTime)
+//        print("⭐ Current usage time: \(Int(currentUsage)) seconds (threshold: \(Int(ratingPromptDelay)))")
+//        
+//        if currentUsage >= ratingPromptDelay {
+//            print("⭐ Usage threshold reached - showing rating prompt")
+//            stopUsageTracking()
+//            
+//            // STEP 2: Pause speech and remember the state before showing popup
+//            pauseSpeechForRatingPopup()
+//            
+//            DispatchQueue.main.async {
+//                self.showRatingPrompt = true
+//                print("⭐ showRatingPrompt set to true")
+//            }
+//        }
+//    }
+//    
+//    private func pauseSpeechForRatingPopup() {
+//        print("⭐ Pausing speech for rating popup")
+//        print("⭐ Current state - isSpeaking: \(synthesizer.isSpeaking), isPaused: \(isPaused)")
+//        
+//        // Remember the current speech state
+//        wasPlayingBeforeRating = synthesizer.isSpeaking && !isPaused
+//        wasPausedBeforeRating = isPaused
+//        
+//        print("⭐ Remembered state - wasPlaying: \(wasPlayingBeforeRating), wasPaused: \(wasPausedBeforeRating)")
+//        
+//        // Pause any active speech
+//        if synthesizer.isSpeaking {
+//            synthesizer.pauseSpeaking(at: .immediate)
+//            isPaused = true
+//            print("⭐ Paused active speech for rating popup")
+//        }
+//    }
+//    
+//    private func resetRatingStatusForTesting() {
+//        UserDefaults.standard.removeObject(forKey: "hasPromptedForRating")
+//        hasPromptedForRating = false
+//        print("⭐ [TESTING] Reset rating status - can prompt again")
+//    }
+//    
+//    private func handleStarTap(_ starNumber: Int) {
+//        print("⭐ Star \(starNumber) tapped, current rating: \(selectedStarRating)")
+//        
+//        // Mark that user has interacted with stars
+//        hasTappedStars = true
+//        
+//        if selectedStarRating == starNumber {
+//            // Tapping the same star deselects all stars
+//            selectedStarRating = 0
+//            print("⭐ Deselected all stars")
+//        } else {
+//            // Tapping a different star selects that star and all previous ones
+//            selectedStarRating = starNumber
+//            print("⭐ Selected \(starNumber) stars")
+//        }
+//    }
+//
+//    private func markRatingPrompted() {
+//        hasPromptedForRating = true
+//        UserDefaults.standard.set(true, forKey: "hasPromptedForRating")
+//        print("⭐ Marked rating as prompted in UserDefaults - will not show again")
+//        
+//        // MARK: - FOR TESTING ONLY
+//        // remove this in production
+//        // This allows testing the rating prompt multiple times
+//        DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+//            UserDefaults.standard.removeObject(forKey: "hasPromptedForRating")
+//            self.hasPromptedForRating = false
+//            print("⭐ [TESTING] Reset rating status after 1 second for testing purposes")
+//        }
+//    }
 //
 //    // MARK: - Helper Functions
 //    func handleFileSelection(url: URL) {
@@ -2449,26 +3073,15 @@
 //                self.fileContent = try String(contentsOf: url, encoding: .utf8)
 //            }
 //
-//            let convertedScript = convertScriptToCorrectFormat(from: fileContent)
-//            self.dialogue = self.extractDialogue(from: convertedScript)
-//
-//            if dialogue.isEmpty {
-//                print("⚠️ The file is empty or has no valid lines with a colon.")
-//            }
-//
-//            let extractedCharacters = Array(Set(dialogue.map { $0.character })).sorted()
-//            self.characters = extractedCharacters
-//            ensureCharacterOptions()
-//            updateHighlightColors() // Set initial colors
-//
-//            
-//
+//            // Just set the file info without validation - validation happens on Continue button
 //            self.uploadedFileName = url.lastPathComponent
 //            self.hasUploadedFile = true
 //            self.hasPressedContinue = false
 //        } catch {
 //            self.fileContent = "Error loading file content."
 //            print("❌ Error loading file content: \(error.localizedDescription)")
+//            // Reset file state on actual file loading error
+//            self.selectedFileURL = nil
 //        }
 //    }
 //
@@ -2514,7 +3127,7 @@
 //        }
 //
 //        let entry = dialogue[currentUtteranceIndex]
-//        if selectedCharacters.contains("Not Applicable") {
+//        if selectedCharacters.contains("Just Listening") {
 //            isUserLine = false
 //            speakLine(entry.line, for: entry.character)
 //        } else if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(entry.character) == .orderedSame }) {
@@ -2548,23 +3161,39 @@
 //
 //    /// Speaks the line using the chosen voice for its character
 //    private func speakLine(_ text: String, for character: String) {
+//        print("🗣️ === speakLine() ENTRY ===")
+//        print("🗣️ character: \(character)")
+//        print("🗣️ currentUtteranceIndex: \(currentUtteranceIndex)")
+//        print("🗣️ text: '\(text)'")
+//        
 //        let utterance = AVSpeechUtterance(string: text)
 //
 //        // Apply the user-picked voice if one is set
 //        if let id = characterOptions[character]?.voiceID,
 //           let voice = AVSpeechSynthesisVoice(identifier: id) {
 //            utterance.voice = voice
+//            print("🗣️ Applied voice: \(voice.name)")
 //        }
 //        utterance.postUtteranceDelay = 0.5
 //
 //        let delegate = AVSpeechSynthesizerDelegateWrapper { [self] in
+//            print("🔔 === REGULAR speakLine DELEGATE FIRED ===")
+//            print("🔔 About to increment from \(currentUtteranceIndex)")
+//            
 //            currentUtteranceIndex += 1
 //            updateProgress()
+//            
+//            print("🔔 After increment: currentUtteranceIndex = \(currentUtteranceIndex)")
+//            print("🔔 About to call startNextLine()")
 //            startNextLine()
+//            print("🔔 === REGULAR DELEGATE COMPLETE ===")
 //        }
+//        
 //        speechDelegate = delegate
 //        synthesizer.delegate = delegate
+//        print("🗣️ About to call synthesizer.speak()")
 //        synthesizer.speak(utterance)
+//        print("🗣️ === speakLine() EXIT ===")
 //    }
 //    
 //    private func updateProgress() {
@@ -2583,29 +3212,36 @@
 //    }
 //
 //    func pauseOrResumeSpeech() {
-//        print("🎵 Pause/Resume called - isSpeaking: \(synthesizer.isSpeaking), isPaused: \(isPaused)")
+//        print("🎵 === pauseOrResumeSpeech() ENTRY ===")
+//        print("🎵 synthesizer.isSpeaking: \(synthesizer.isSpeaking)")
+//        print("🎵 isPaused: \(isPaused)")
+//        print("🎵 currentUtteranceIndex: \(currentUtteranceIndex)")
+//        print("🎵 isUserLine: \(isUserLine)")
 //        
 //        if synthesizer.isSpeaking {
 //            if isPaused {
 //                // Resume
-//                print("▶️ Resuming...")
+//                print("🎵 RESUMING...")
 //                synthesizer.continueSpeaking()
 //                isPaused = false
-//                print("▶️ Resumed - isPaused now: \(isPaused)")
+//                print("🎵 Resumed - isPaused now: \(isPaused)")
 //            } else {
 //                // Pause
-//                print("⏸️ Pausing...")
+//                print("🎵 PAUSING...")
 //                synthesizer.pauseSpeaking(at: .word)
 //                isPaused = true
-//                print("⏸️ Paused - isPaused now: \(isPaused)")
+//                print("🎵 Paused - isPaused now: \(isPaused)")
 //            }
 //        } else {
 //            // If not speaking, start from current line
-//            print("🎬 Not speaking - starting from current line")
+//            print("🎵 NOT SPEAKING - starting from current line")
+//            print("🎵 About to set isPaused = false and call startNextLine()")
 //            isPaused = false
 //            startNextLine()
-//            print("🎬 Started - isPaused now: \(isPaused)")
+//            print("🎵 Started - isPaused now: \(isPaused)")
 //        }
+//        
+//        print("🎵 === pauseOrResumeSpeech() EXIT ===")
 //    }
 //    
 //    
