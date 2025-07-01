@@ -73,6 +73,10 @@ struct ContentView: View {
     @State private var startingLineIndex: Int = 0
     
     @State private var showTapToContinue: Bool = false
+    @State private var firstVideoURL: URL?
+    @State private var secondVideoURL: URL?
+    @State private var hasPlayedFirstVideo = false
+    @State private var isPlayingSecondVideo = false
     
     @State private var showHints: Bool = true
     @State private var hintClickCount: Int = 0
@@ -302,6 +306,7 @@ struct ContentView: View {
         }
     }
 
+    
     // MARK: - Splash View
     @ViewBuilder
     private var splashView: some View {
@@ -312,31 +317,120 @@ struct ContentView: View {
             VStack {
                 VStack(spacing: 10) {
                     Text("Welcome to")
-                        .font(.system(size: 40, weight: .bold))
+                        .font(.system(size: 44, weight: .bold))
                         .foregroundColor(colorScheme == .dark ? .white : .black)
                         .multilineTextAlignment(.center)
 
                     Text("SceneAloud!")
-                        .font(.system(size: 40, weight: .bold))
+                        .font(.system(size: 44, weight: .bold))
                         .foregroundColor(colorScheme == .dark ? .white : .black)
                         .multilineTextAlignment(.center)
                         .padding(.top, 5)
                 }
-                .padding(.top, 40)
+                .padding(.top, 160)
 
                 Spacer()
                 
-                // "Tap anywhere to continue" text that appears after 1 second
-                if showTapToContinue {
-                    Text("Tap anywhere to continue")
-                        .font(.body)
-                        .foregroundColor(colorScheme == .dark ? .white : .black)
-                        .opacity(0.8)
-                        .transition(.opacity)
-                        .animation(.easeInOut(duration: 0.5), value: showTapToContinue)
-                        .padding(.bottom, 10)
+                // Video player with dark mode support
+                if let videoURLs = getVideoURLsForColorScheme() {
+                    ZStack {
+                        // Background that adapts to color scheme
+                        Rectangle()
+                            .fill(colorScheme == .dark ? Color.black : Color.white)
+                            .frame(width: 575, height: 575)
+                            .cornerRadius(15)
+                        
+                        VideoPlayer(player: splashPlayer)
+                            .frame(width: 575, height: 575)
+                            .background(Color.clear)
+                            .clipped()
+                            .cornerRadius(15)
+                            .disabled(true)
+                            .allowsHitTesting(false)
+                        
+                        // Multiple overlays to cover black areas (only in light mode)
+                        if colorScheme == .light {
+                            // Specific overlay for black rectangle between video and "SceneAloud!" text
+                            Rectangle()
+                                .fill(Color.white)
+                                .frame(width: 575, height: 100) // Taller to cover the problem area
+                                .position(x: 287.5, y: 50) // Higher up to cover area above video
+                                .allowsHitTesting(false)
+                            
+                            // Top overlay (original)
+                            Rectangle()
+                                .fill(Color.white)
+                                .frame(width: 575, height: 105)
+                                .position(x: 287.5, y: 75)
+                                .allowsHitTesting(false)
+                            
+                            // Bottom overlay
+                            Rectangle()
+                                .fill(Color.white)
+                                .frame(width: 575, height: 150)
+                                .position(x: 287.5, y: 495)
+                                .allowsHitTesting(false)
+                            
+                            // Left overlay
+                            Rectangle()
+                                .fill(Color.white)
+                                .frame(width: 50, height: 575)
+                                .position(x: 25, y: 287.5)
+                                .allowsHitTesting(false)
+                            
+                            // Right overlay
+                            Rectangle()
+                                .fill(Color.white)
+                                .frame(width: 50, height: 575)
+                                .position(x: 550, y: 287.5)
+                                .allowsHitTesting(false)
+                            
+                            // Corner overlays for rounded corners
+                            RoundedRectangle(cornerRadius: 15)
+                                .fill(Color.clear)
+                                .stroke(Color.white, lineWidth: 15)
+                                .frame(width: 575, height: 575)
+                                .allowsHitTesting(false)
+                        }
+                    }
+                    .onAppear {
+                        setupFirstVideo(firstVideoURL: videoURLs.first, secondVideoURL: videoURLs.second)
+                    }
+                    .onDisappear {
+                        cleanupVideoPlayer()
+                    }
+                } else {
+                    // Fallback if video files are not found
+                    Rectangle()
+                        .fill(Color.gray.opacity(0.3))
+                        .frame(width: 200, height: 200)
+                        .cornerRadius(15)
+                        .overlay(
+                            Text("Video not found")
+                                .foregroundColor(.gray)
+                        )
                 }
-
+                
+                Spacer()
+                
+                // Fixed height container for tap text to prevent credits from moving
+                VStack {
+                    if showTapToContinue {
+                        Text("Tap anywhere to continue")
+                            .font(.body)
+                            .foregroundColor(colorScheme == .dark ? .white : .black)
+                            .opacity(0.8)
+                            .transition(.opacity)
+                            .animation(.easeInOut(duration: 0.5), value: showTapToContinue)
+                    } else {
+                        // Invisible placeholder to maintain layout
+                        Text("Tap anywhere to continue")
+                            .font(.body)
+                            .opacity(0)
+                    }
+                }
+                .frame(height: 30) // Fixed height to prevent layout shifts
+                .padding(.bottom, 2.5)
 
                 VStack(spacing: 5) {
                     Text("Created by Lucy Brown")
@@ -344,23 +438,14 @@ struct ContentView: View {
                 }
                 .font(.footnote)
                 .foregroundColor(.gray)
-                .padding(.bottom, 20)
+                .padding(.bottom, 155)
             }
             .padding(.horizontal)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .contentShape(Rectangle())
         .onTapGesture {
-            isShowingSplash = false
-            isShowingHomepage = true
-        }
-        .onAppear {
-            // Show "Tap anywhere to continue" text after 1 second
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
-                withAnimation {
-                    showTapToContinue = true
-                }
-            }
+            handleSplashTap()
         }
     }
     
@@ -3220,7 +3305,136 @@ struct ContentView: View {
         print("🌈 Applied default colors to selected characters")
         print("🌈 === updateHighlightColors() END ===")
     }
+    
+    // MARK: - Splash Screen Helper Functions
+    
+    private func getVideoURLsForColorScheme() -> (first: URL, second: URL)? {
+        if colorScheme == .dark {
+            // Dark mode videos
+            guard let firstURL = Bundle.main.url(forResource: "SceneAloudLogo_Anim1", withExtension: "mp4"),
+                  let secondURL = Bundle.main.url(forResource: "SceneAloudLogo_Anim2", withExtension: "mp4") else {
+                print("❌ Dark mode videos not found")
+                return nil
+            }
+            return (first: firstURL, second: secondURL)
+        } else {
+            // Light mode videos
+            guard let firstURL = Bundle.main.url(forResource: "Sequence 10", withExtension: "mp4"),
+                  let secondURL = Bundle.main.url(forResource: "Sequence 10_1", withExtension: "mp4") else {
+                print("❌ Light mode videos not found")
+                return nil
+            }
+            return (first: firstURL, second: secondURL)
+        }
+    }
+    
+    private func setupFirstVideo(firstVideoURL: URL, secondVideoURL: URL) {
+        self.firstVideoURL = firstVideoURL
+        self.secondVideoURL = secondVideoURL
+        
+        let playerItem = AVPlayerItem(url: firstVideoURL)
+        splashPlayer.replaceCurrentItem(with: playerItem)
+        splashPlayer.actionAtItemEnd = .pause
+        
+        // Set up first video completion detection
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: playerItem,
+            queue: .main
+        ) { _ in
+            // First video finished - show tap prompt
+            print("🎬 First video finished")
+            withAnimation {
+                self.showTapToContinue = true
+                self.hasPlayedFirstVideo = true
+            }
+        }
+        
+        splashPlayer.play()
+        print("🎬 Started playing first video")
+    }
 
+    private func handleSplashTap() {
+        print("🖱️ Splash tap detected - hasPlayedFirstVideo: \(hasPlayedFirstVideo), isPlayingSecondVideo: \(isPlayingSecondVideo)")
+        
+        if hasPlayedFirstVideo && !isPlayingSecondVideo {
+            // First video has finished and user tapped - play second video
+            print("🎬 Playing second video")
+            playSecondVideo()
+        } else if isPlayingSecondVideo {
+            // Second video is playing - ignore taps to prevent interruption
+            print("🎬 Second video playing - ignoring tap")
+            return
+        } else {
+            // First video hasn't finished yet - ignore tap
+            print("🎬 First video still playing - ignoring tap")
+            return
+        }
+    }
+
+    private func playSecondVideo() {
+        guard let secondVideoURL = secondVideoURL else {
+            print("❌ Second video URL not found")
+            return
+        }
+        
+        print("🎬 Setting up second video: \(secondVideoURL.lastPathComponent)")
+        isPlayingSecondVideo = true
+        
+        // Hide tap prompt with animation
+        withAnimation {
+            showTapToContinue = false
+        }
+        
+        // Remove old observers to prevent conflicts
+        NotificationCenter.default.removeObserver(
+            self,
+            name: .AVPlayerItemDidPlayToEndTime,
+            object: nil
+        )
+        
+        // Set up second video
+        let secondPlayerItem = AVPlayerItem(url: secondVideoURL)
+        splashPlayer.replaceCurrentItem(with: secondPlayerItem)
+        splashPlayer.actionAtItemEnd = .pause
+        
+        // Set up second video completion detection
+        NotificationCenter.default.addObserver(
+            forName: .AVPlayerItemDidPlayToEndTime,
+            object: secondPlayerItem,
+            queue: .main
+        ) { _ in
+            // Second video finished - go to homepage
+            print("🎬 Second video finished - transitioning to homepage")
+            self.transitionToHomepage()
+        }
+        
+        // Start playing second video
+        splashPlayer.play()
+        print("🎬 Second video started playing")
+    }
+
+    private func transitionToHomepage() {
+        withAnimation(.easeInOut(duration: 0.5)) {
+            isShowingSplash = false
+            isShowingHomepage = true
+        }
+    }
+
+    private func cleanupVideoPlayer() {
+        splashPlayer.pause()
+        NotificationCenter.default.removeObserver(
+            self,
+            name: .AVPlayerItemDidPlayToEndTime,
+            object: nil
+        )
+        
+        // Reset video states
+        hasPlayedFirstVideo = false
+        isPlayingSecondVideo = false
+        showTapToContinue = false
+    }
+    
     // MARK: - Skip Navigation Functions
     private func skipBackOneLine() {
         print("🔄 Skip back pressed - Current index: \(currentUtteranceIndex), isPaused: \(isPaused)")

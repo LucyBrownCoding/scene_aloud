@@ -72,6 +72,8 @@
 //    @State private var hasSetStartingLine: Bool = false
 //    @State private var startingLineIndex: Int = 0
 //    
+//    @State private var showTapToContinue: Bool = false
+//    
 //    @State private var showHints: Bool = true
 //    @State private var hintClickCount: Int = 0
 //    @State private var currentHintLineIndex: Int = -1
@@ -93,16 +95,19 @@
 //    @State private var wasPlayingBeforeRating: Bool = false
 //    @State private var wasPausedBeforeRating: Bool = false
 //    @State private var expandedStartingLines: Set<UUID> = []
-//
 //    
+//    @State private var showDeleteConfirmation: Bool = false
+//    @State private var scriptToDelete: SavedScript? = nil
+//
 //    @State private var hasTappedStars: Bool = false
 //    @State private var selectedStarRating: Int = 0
+//    @State private var showRatingAlert: Bool = false
+//    @State private var showRatingPrompt: Bool = false
 //    @State private var showStarRating: Bool = false
 //    @State private var appUsageTimer: Timer?
 //    @State private var usageStartTime: Date?
-//    @State private var showRatingPrompt: Bool = false
 //    @State private var hasPromptedForRating: Bool = false
-//    private let ratingPromptDelay: TimeInterval = 20.0 // 20 seconds for testing (change to 120.0 for 2 minutes in production)
+//    private let ratingPromptDelay: TimeInterval = 10.0
 //
 //    enum AlertType: Identifiable {
 //        case noCharacterSelected
@@ -151,7 +156,7 @@
 //            mainContentView
 //                .navigationBarHidden(isShowingSplash)
 //            
-//            // Library slide-in panel (updated to use LibraryManager)
+//            // Hamburger menu slide-in panel
 //            if isLibraryOpen {
 //                // Dark overlay background
 //                Color.black.opacity(0.3)
@@ -162,11 +167,11 @@
 //                        }
 //                    }
 //                
-//                // Library panel
+//                // Menu panel
 //                VStack(alignment: .leading, spacing: 0) {
 //                    // Header
 //                    HStack {
-//                        Text("Library")
+//                        Text("Menu")
 //                            .font(.title2)
 //                            .bold()
 //                        
@@ -184,70 +189,59 @@
 //                    .padding()
 //                    .background(Color(UIColor.secondarySystemBackground))
 //                    
-//                    // Scripts list
-//                    if libraryManager.scripts.isEmpty {
-//                        VStack {
-//                            Spacer()
-//                            Text("No saved scripts")
-//                                .foregroundColor(.secondary)
-//                                .font(.body)
-//                            Text("Scripts will appear here after you save them")
-//                                .foregroundColor(.secondary)
-//                                .font(.caption)
-//                                .multilineTextAlignment(.center)
-//                            Spacer()
-//                        }
-//                        .padding()
-//                    } else {
-//                        ScrollView {
-//                            LazyVStack(alignment: .leading, spacing: 12) {
-//                                ForEach(libraryManager.scripts.sorted(by: { $0.dateSaved > $1.dateSaved })) { script in
-//                                    Button(action: {
-//                                        libraryManager.select(script)
-//                                    }) {
-//                                        VStack(alignment: .leading, spacing: 8) {
-//                                            HStack {
-//                                                Text(script.title)
-//                                                    .font(.headline)
-//                                                    .foregroundColor(.primary)
-//                                                    .lineLimit(1)
-//                                                
-//                                                Spacer()
-//                                                
-//                                                Text(script.dateSaved, style: .date)
-//                                                    .font(.caption)
-//                                                    .foregroundColor(.secondary)
-//                                            }
-//                                            
-//                                            HStack {
-//                                                // Progress indicator
-//                                                let totalLines = script.rawText.components(separatedBy: .newlines)
-//                                                    .filter { $0.contains(":") }.count
-//                                                if totalLines > 0 {
-//                                                    Text("Progress: \(script.progressIndex)/\(totalLines)")
-//                                                        .font(.caption)
-//                                                        .foregroundColor(.secondary)
-//                                                }
-//                                                
-//                                                Spacer()
-//                                                
-//                                                // Character count
-//                                                Text("\(script.settings.selectedCharacters.count) characters")
-//                                                    .font(.caption)
-//                                                    .foregroundColor(.secondary)
-//                                            }
-//                                        }
-//                                        .padding()
-//                                        .background(Color(UIColor.secondarySystemBackground))
-//                                        .cornerRadius(8)
-//                                    }
-//                                    .buttonStyle(PlainButtonStyle())
-//                                }
+//                    // Menu options
+//                    VStack(spacing: 0) {
+//                        // Upload Script button
+//                        Button(action: {
+//                            navigateToUploadScript()
+//                        }) {
+//                            HStack {
+//                                Image(systemName: "doc.text.fill")
+//                                    .font(.title3)
+//                                    .foregroundColor(.blue)
+//                                
+//                                Text("Upload Script")
+//                                    .font(.headline)
+//                                    .foregroundColor(.primary)
+//                                
+//                                Spacer()
+//                                
+//                                Image(systemName: "chevron.right")
+//                                    .font(.caption)
+//                                    .foregroundColor(.secondary)
 //                            }
-//                            .padding(.horizontal)
-//                            .padding(.vertical, 8)
+//                            .padding()
+//                            .background(Color(UIColor.systemBackground))
 //                        }
+//                        .buttonStyle(PlainButtonStyle())
+//                        
+//                        Divider()
+//                        
+//                        // Script Library button
+//                        Button(action: {
+//                            navigateToScriptLibrary()
+//                        }) {
+//                            HStack {
+//                                Image(systemName: "books.vertical.fill")
+//                                    .font(.title3)
+//                                    .foregroundColor(.green)
+//                                
+//                                Text("Script Library")
+//                                    .font(.headline)
+//                                    .foregroundColor(.primary)
+//                                
+//                                Spacer()
+//                                
+//                                Image(systemName: "chevron.right")
+//                                    .font(.caption)
+//                                    .foregroundColor(.secondary)
+//                            }
+//                            .padding()
+//                            .background(Color(UIColor.systemBackground))
+//                        }
+//                        .buttonStyle(PlainButtonStyle())
 //                    }
+//                    .padding(.top, 20)
 //                    
 //                    Spacer()
 //                }
@@ -267,15 +261,6 @@
 //                    restartScript(keepSettings: false)
 //                }
 //            )
-//        }
-//        .onChange(of: libraryManager.selectedScript) { _, newValue in
-//            if let script = newValue {
-//                loadScript(from: script)
-//                libraryManager.selectedScript = nil // Reset selection
-//                withAnimation {
-//                    isLibraryOpen = false
-//                }
-//            }
 //        }
 //    }
 //
@@ -340,6 +325,18 @@
 //                .padding(.top, 40)
 //
 //                Spacer()
+//                
+//                // "Tap anywhere to continue" text that appears after 1 second
+//                if showTapToContinue {
+//                    Text("Tap anywhere to continue")
+//                        .font(.body)
+//                        .foregroundColor(colorScheme == .dark ? .white : .black)
+//                        .opacity(0.8)
+//                        .transition(.opacity)
+//                        .animation(.easeInOut(duration: 0.5), value: showTapToContinue)
+//                        .padding(.bottom, 10)
+//                }
+//
 //
 //                VStack(spacing: 5) {
 //                    Text("Created by Lucy Brown")
@@ -357,71 +354,79 @@
 //            isShowingSplash = false
 //            isShowingHomepage = true
 //        }
+//        .onAppear {
+//            // Show "Tap anywhere to continue" text after 1 second
+//            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
+//                withAnimation {
+//                    showTapToContinue = true
+//                }
+//            }
+//        }
 //    }
 //    
 //    // MARK: - Homepage View
 //    @ViewBuilder
 //    private var homepageView: some View {
-//        VStack(spacing: 30) {
-//            Spacer()
-//            
-//            // App title
-//            Text("SceneAloud")
-//                .font(.largeTitle)
-//                .bold()
-//                .padding(.top, 20)
-//            
-//            Text("Choose an option to get started")
-//                .font(.title2)
-//                .multilineTextAlignment(.center)
-//                .foregroundColor(.secondary)
-//                .padding(.horizontal, 40)
-//            
-//            Spacer()
-//            
-//            // Main action buttons
-//            VStack(spacing: 20) {
-//                // Upload Script button
-//                Button(action: {
-//                    isLoadedScript = false
-//                    isShowingHomepage = false
-//                    // This will navigate to the upload view since hasUploadedFile is still false
-//                }) {
-//                    HStack {
-//                        Image(systemName: "doc.text.fill")
-//                            .font(.title2)
-//                        Text("Upload Script")
-//                            .font(.headline)
-//                    }
-//                    .frame(maxWidth: .infinity)
-//                    .padding()
-//                    .background(Color.blue)
-//                    .foregroundColor(.white)
-//                    .cornerRadius(15)
-//                }
-//                .padding(.horizontal, 40)
+//        VStack(spacing: 0) {
+//            // Top section with title, subtitle, and buttons grouped together
+//            VStack(spacing: 0) {
+//                Text("Home")
+//                    .font(.largeTitle)
+//                    .bold()
+//                    .padding(.top, 20)
+//                    .padding(.bottom, 10)
 //                
-//                // Library button
-//                Button(action: {
-//                    isShowingHomepage = false
-//                    isShowingScriptLibrary = true
-//                }) {
-//                    HStack {
-//                        Image(systemName: "books.vertical.fill")
-//                            .font(.title2)
-//                        Text("Script Library")
-//                            .font(.headline)
+//                Text("Choose an option to get started")
+//                    .font(.title2)
+//                    .multilineTextAlignment(.center)
+//                    .foregroundColor(.secondary)
+//                    .padding(.horizontal, 40)
+//                    .padding(.bottom, 50)  // Space before buttons
+//                
+//                // Main action buttons - directly under the subtitle
+//                VStack(spacing: 40) {
+//                    // Upload Script button
+//                    Button(action: {
+//                        isLoadedScript = false
+//                        isShowingHomepage = false
+//                        // This will navigate to the upload view since hasUploadedFile is still false
+//                    }) {
+//                        HStack {
+//                            Image(systemName: "doc.text.fill")
+//                                .font(.title2)
+//                            Text("Upload Script")
+//                                .font(.headline)
+//                        }
+//                        .frame(maxWidth: .infinity)
+//                        .padding()
+//                        .background(Color.blue)
+//                        .foregroundColor(.white)
+//                        .cornerRadius(15)
 //                    }
-//                    .frame(maxWidth: .infinity)
-//                    .padding()
-//                    .background(Color.green)
-//                    .foregroundColor(.white)
-//                    .cornerRadius(15)
+//                    .padding(.horizontal, 40)
+//                    
+//                    // Library button
+//                    Button(action: {
+//                        isShowingHomepage = false
+//                        isShowingScriptLibrary = true
+//                    }) {
+//                        HStack {
+//                            Image(systemName: "books.vertical.fill")
+//                                .font(.title2)
+//                            Text("Script Library")
+//                                .font(.headline)
+//                        }
+//                        .frame(maxWidth: .infinity)
+//                        .padding()
+//                        .background(Color.green)
+//                        .foregroundColor(.white)
+//                        .cornerRadius(15)
+//                    }
+//                    .padding(.horizontal, 40)
 //                }
-//                .padding(.horizontal, 40)
 //            }
 //            
-//            Spacer()
+//            // Spacer to fill remaining space
 //            Spacer()
 //        }
 //        .navigationTitle("")
@@ -451,28 +456,35 @@
 //            
 //            // Scripts list
 //            if libraryManager.scripts.isEmpty {
-//                // Empty state
+//                // Empty state - centered
 //                VStack(spacing: 15) {
 //                    Spacer()
+//                    
 //                    Image(systemName: "books.vertical")
 //                        .font(.system(size: 60))
 //                        .foregroundColor(.gray)
-//                    
+//                            
 //                    Text("No Saved Scripts")
 //                        .font(.title2)
 //                        .bold()
 //                        .foregroundColor(.primary)
-//                    
-//                    Text("Scripts you rehearse will appear here")
+//                            
+//                    Text("You don't have any saved scripts yet")
 //                        .font(.body)
 //                        .foregroundColor(.secondary)
 //                        .multilineTextAlignment(.center)
-//                    
+//                            
+//                    Text("Scripts you rehearse will appear here")
+//                        .font(.caption)
+//                        .foregroundColor(.secondary)
+//                        .multilineTextAlignment(.center)
+//                            
 //                    Spacer()
 //                }
 //                .frame(maxWidth: .infinity)
 //                .padding(.horizontal, 40)
 //            } else {
+//                
 //                // Scripts list
 //                ScrollView {
 //                    LazyVStack(spacing: 15) {
@@ -503,6 +515,36 @@
 //                    }
 //                }
 //            }
+//            ToolbarItem(placement: .navigationBarTrailing) {
+//                Button(action: {
+//                    withAnimation {
+//                        isLibraryOpen.toggle()
+//                    }
+//                }) {
+//                    Image(systemName: "line.3.horizontal")
+//                        .font(.title2)
+//                        .foregroundColor(.blue)
+//                }
+//                .accessibilityLabel("Main menu")
+//            }
+//        }
+//        .alert("Delete Script", isPresented: $showDeleteConfirmation) {
+//            Button("Cancel", role: .cancel) {
+//                scriptToDelete = nil
+//            }
+//            Button("Confirm", role: .destructive) {
+//                if let script = scriptToDelete {
+//                    deleteScript(script)  // Use our helper function, not libraryManager.delete
+//                    print("🗑️ Deleted script: \(script.title)")
+//                }
+//                scriptToDelete = nil
+//            }
+//        } message: {
+//            if let script = scriptToDelete {
+//                Text("Are you sure you want to delete '\(script.title)'? This action cannot be undone.")
+//            } else {
+//                Text("Are you sure you want to delete this script? This action cannot be undone.")
+//            }
 //        }
 //    }
 //    
@@ -510,17 +552,34 @@
 //    @ViewBuilder
 //    private func scriptLibraryCard(for script: SavedScript) -> some View {
 //        VStack(alignment: .leading, spacing: 12) {
-//            // Script Title
-//            Text(script.title)
-//                .font(.headline)
-//                .bold()
-//                .frame(maxWidth: .infinity, alignment: .leading)
+//
+//            // Script Title with delete button
+//            HStack {
+//                Text(script.title)
+//                    .font(.headline)
+//                    .bold()
+//                    .frame(maxWidth: .infinity, alignment: .leading)
+//                
+//                Spacer()
+//                
+//                // Delete button
+//                Button(action: {
+//                    scriptToDelete = script
+//                    showDeleteConfirmation = true
+//                }) {
+//                    Image(systemName: "trash")
+//                        .font(.body)
+//                        .foregroundColor(.red)
+//                }
+//                .buttonStyle(PlainButtonStyle())
+//            }
+//            .frame(maxWidth: .infinity, alignment: .leading)
 //            
 //            // Character Names
 //            VStack(alignment: .leading, spacing: 4) {
 //                Text("Characters:")
 //                    .font(.subheadline)
-//                    .foregroundColor(.secondary)
+//                    .foregroundColor(adaptiveSecondaryColor)
 //                
 //                let allCharacters = getCharacterNamesForScript(script)
 //                let isJustListening = script.settings.selectedCharacters.contains("Just Listening") || script.settings.selectedCharacters.contains("Not Applicable")
@@ -551,7 +610,7 @@
 //                                ForEach(allCharacters, id: \.self) { characterName in
 //                                    Text(characterName.capitalized)
 //                                        .font(.subheadline)
-//                                        .foregroundColor(.secondary)
+//                                        .foregroundColor(adaptiveSecondaryColor)
 //                                        .padding(.leading, 8)
 //                                }
 //                            } else {
@@ -560,7 +619,7 @@
 //                                ForEach(Array(displayCharacters), id: \.self) { characterName in
 //                                    Text(characterName.capitalized)
 //                                        .font(.subheadline)
-//                                        .foregroundColor(.secondary)
+//                                        .foregroundColor(adaptiveSecondaryColor)
 //                                        .padding(.leading, 8)
 //                                }
 //                                
@@ -615,7 +674,7 @@
 //                                ForEach(userCharacters, id: \.self) { characterName in
 //                                    Text(characterName.capitalized)
 //                                        .font(.subheadline)
-//                                        .foregroundColor(.blue)
+//                                        .foregroundColor(getCharacterHighlightColor(characterName, script: script))
 //                                        .bold()
 //                                        .padding(.leading, 8)
 //                                }
@@ -627,7 +686,7 @@
 //                                ForEach(otherCharacters, id: \.self) { characterName in
 //                                    Text(characterName.capitalized)
 //                                        .font(.subheadline)
-//                                        .foregroundColor(.secondary)
+//                                        .foregroundColor(adaptiveSecondaryColor)
 //                                        .padding(.leading, 8)
 //                                }
 //                            } else {
@@ -636,7 +695,7 @@
 //                                ForEach(Array(displayOtherCharacters), id: \.self) { characterName in
 //                                    Text(characterName.capitalized)
 //                                        .font(.subheadline)
-//                                        .foregroundColor(.secondary)
+//                                        .foregroundColor(adaptiveSecondaryColor)
 //                                        .padding(.leading, 8)
 //                                }
 //                                
@@ -663,7 +722,7 @@
 //                            if userCharacters.isEmpty && otherCharacters.isEmpty {
 //                                Text("No characters found")
 //                                    .font(.caption)
-//                                    .foregroundColor(.secondary)
+//                                    .foregroundColor(adaptiveSecondaryColor)
 //                                    .italic()
 //                                    .padding(.leading, 8)
 //                            }
@@ -679,20 +738,20 @@
 //            VStack(alignment: .leading, spacing: 4) {
 //                Text("Settings:")
 //                    .font(.subheadline)
-//                    .foregroundColor(.secondary)
+//                    .foregroundColor(adaptiveSecondaryColor)
 //                
 //                HStack(spacing: 15) {
 //                    Text("Display lines as read")
 //                        .font(.caption)
-//                        .foregroundColor(script.settings.displayLinesAsRead ? .green : .secondary)
+//                        .foregroundColor(script.settings.displayLinesAsRead ? .green : adaptiveSecondaryColor)
 //                    
 //                    Text("Display my lines")
 //                        .font(.caption)
-//                        .foregroundColor(script.settings.displayMyLines ? .green : .secondary)
+//                        .foregroundColor(script.settings.displayMyLines ? .green : adaptiveSecondaryColor)
 //                    
 //                    Text("Hints")
 //                        .font(.caption)
-//                        .foregroundColor(script.settings.showHints ? .green : .secondary)
+//                        .foregroundColor(script.settings.showHints ? .green : adaptiveSecondaryColor)
 //                }
 //            }
 //            
@@ -705,7 +764,7 @@
 //                HStack {
 //                    Text("Starting line:")
 //                        .font(.subheadline)
-//                        .foregroundColor(.secondary)
+//                        .foregroundColor(adaptiveSecondaryColor)
 //                    Spacer()
 //                }
 //                
@@ -783,7 +842,7 @@
 //            VStack(alignment: .leading, spacing: 8) {
 //                Text("Progress:")
 //                    .font(.subheadline)
-//                    .foregroundColor(.secondary)
+//                    .foregroundColor(adaptiveSecondaryColor)
 //                
 //                VStack(alignment: .leading, spacing: 4) {
 //                    let snippet = getProgressSnippet(script)
@@ -808,7 +867,7 @@
 //                    }
 //                }
 //                .padding(8)
-//                .background(Color.gray.opacity(0.1))
+//                .background(Color.gray.opacity(0.2))
 //                .cornerRadius(8)
 //            }
 //            Button(action: {
@@ -1689,87 +1748,6 @@
 //            }
 //        }
 //    }
-//    
-//    //MARK: - Rating View
-//    @ViewBuilder
-//    private var customRatingView: some View {
-//        ZStack {
-//            // Dark overlay background
-//            Color.black.opacity(0.3)
-//                .ignoresSafeArea()
-//            
-//            // Rating popup box
-//            VStack(spacing: 20) {
-//                // "Enjoying SceneAloud?" text
-//                Text("Enjoying SceneAloud?")
-//                    .font(.title2)
-//                    .fontWeight(.bold)
-//                    .multilineTextAlignment(.center)
-//                
-//                // "Tap a star to rate it on the App Store" text
-//                Text("Tap a star to rate it on the\nApp Store.")
-//                    .font(.body)
-//                    .multilineTextAlignment(.center)
-//                    .foregroundColor(.secondary)
-//                
-//                // Five interactive stars
-//                HStack(spacing: 10) {
-//                    ForEach(1...5, id: \.self) { index in
-//                        Button(action: {
-//                            handleStarTap(index)
-//                        }) {
-//                            Image(systemName: index <= selectedStarRating ? "star.fill" : "star")
-//                                .font(.system(size: 30))
-//                                .foregroundColor(.blue)
-//                        }
-//                        .buttonStyle(PlainButtonStyle())
-//                    }
-//                }
-//                .padding(.vertical, 10)
-//                
-//                // Bottom buttons area
-//                if hasTappedStars {
-//                    // Always show Cancel and Submit once user has tapped stars
-//                    HStack {
-//                        Button("Cancel") {
-//                            selectedStarRating = 0
-//                            hasTappedStars = false  // Reset for next time - this ensures next popup starts with "Not Now"
-//                            showRatingPrompt = false
-//                            startUsageTracking()  // Start timer for next 20 seconds
-//                        }
-//                        .font(.body)
-//                        .foregroundColor(.blue)
-//                        
-//                        Spacer()
-//                        
-//                        Button("Submit") {
-//                            openAppStoreRating()
-//                            markRatingPrompted()
-//                            showRatingPrompt = false
-//                            selectedStarRating = 0  // Reset for next time
-//                            hasTappedStars = false  // Reset for next time
-//                        }
-//                        .font(.body)
-//                        .foregroundColor(.blue)
-//                    }
-//                } else {
-//                    // Show "Not Now" only when user hasn't tapped stars yet
-//                    Button("Not Now") {
-//                        print("⭐ User selected 'Not Now' - restarting timer")
-//                        showRatingPrompt = false
-//                        startUsageTracking()
-//                    }
-//                    .font(.body)
-//                    .foregroundColor(.blue)
-//                }
-//            }
-//            .padding(30)
-//            .background(colorScheme == .dark ? Color(UIColor.systemGray5) : Color(UIColor.systemGray6))
-//            .cornerRadius(20)
-//            .shadow(radius: 10)
-//            .frame(maxWidth: 300)
-//        }
-//    }
 //
 //    // MARK: - Voice Change Handlers
 //    private func handleGenderChange(for name: String, newGender: VoiceGender) {
@@ -1944,8 +1922,16 @@
 //            }
 //        }
 //        .onAppear {
+//            print("🎨 === Character Customization View Appeared ===")
+//            print("🎨 Current characterOptions: \(characterOptions.mapValues { "color: \($0.highlight)" })")
+//            print("🎨 isLoadedScript: \(isLoadedScript)")
+//                
 //            ensureCharacterOptions()
 //            updateHighlightColors()
+//            
+//            print("🎨 After ensureCharacterOptions:")
+//            print("🎨 Updated characterOptions: \(characterOptions.mapValues { "color: \($0.highlight)" })")
+//            print("🎨 === End Debug ===")
 //        }
 //        .onDisappear {
 //            stopVoicePreview()
@@ -2171,12 +2157,6 @@
 //        }
 //        
 //        .onAppear {
-//            print("🔍 Starting line view appeared")
-//            print("🔍 selectedStartingLineIndex: \(selectedStartingLineIndex)")
-//            print("🔍 startingLineIndex: \(startingLineIndex)")
-//            print("🔍 hasSetStartingLine: \(hasSetStartingLine)")
-//            print("🔍 isLoadedScript: \(isLoadedScript)")
-//            
 //            // Restore starting line selection if it was set
 //            if selectedStartingLineIndex == nil && hasSetStartingLine {
 //                selectedStartingLineIndex = startingLineIndex
@@ -2222,14 +2202,14 @@
 //                .onAppear {
 //                    initializeSpeech()
 //                    startUsageTracking() // Start tracking usage time
-//                        
+//                    
 //                    // Auto-save new scripts when they first reach the script reading view
 //                    if currentSavedScript == nil {
 //                        print("💾 Auto-saving new script: \(scriptName)")
 //                        saveCurrentScript()
 //                    } else {
 //                        print("📖 Continuing existing script: \(currentSavedScript?.title ?? "Unknown")")
-//                            
+//                        
 //                        // Auto-scroll to current progress position with a small delay
 //                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
 //                            withAnimation(.easeInOut(duration: 1.0)) {
@@ -2241,7 +2221,7 @@
 //                }
 //            }
 //            .background(Color(UIColor.systemBackground))
-//
+//            
 //            controlButtonsSection
 //        }
 //        .navigationTitle(scriptName.isEmpty ? "SceneAloud" : scriptName)
@@ -2257,10 +2237,6 @@
 //                        saveCurrentScript()
 //                        print("💾 Saved progress before going back")
 //                    }
-//                    
-//                    print("🔍 Before navigation - startingLineIndex: \(startingLineIndex)")
-//                    print("🔍 Before navigation - selectedStartingLineIndex: \(selectedStartingLineIndex)")
-//                    print("🔍 Before navigation - hasSetStartingLine: \(hasSetStartingLine)")
 //                    
 //                    if isLoadedScript {
 //                        // For loaded scripts: skip starting line selection, go directly to character customization
@@ -2299,16 +2275,13 @@
 //            pauseSpeechForNavigation()
 //            stopUsageTracking() // Stop tracking when leaving script view
 //        }
-//        .onDisappear {
-//            // Auto-pause when view disappears for any reason
-//            pauseSpeechForNavigation()
-//        }
 //        .overlay {
 //            if showRatingPrompt {
 //                customRatingView
 //            }
 //        }
 //    }
+//
 //    
 //    private func pauseSpeechForNavigation() {
 //            if synthesizer.isSpeaking {
@@ -2464,6 +2437,86 @@
 //            }
 //        }
 //        .padding(.bottom, 20)
+//    }
+//    
+//    @ViewBuilder
+//    private var customRatingView: some View {
+//        ZStack {
+//            // Dark overlay background
+//            Color.black.opacity(0.3)
+//                .ignoresSafeArea()
+//
+//            // Rating popup box
+//            VStack(spacing: 20) {
+//                // "Enjoying SceneAloud?" text
+//                Text("Enjoying SceneAloud?")
+//                    .font(.title2)
+//                    .fontWeight(.bold)
+//                    .multilineTextAlignment(.center)
+//
+//                // "Tap a star to rate it on the App Store" text
+//                Text("Tap a star to rate it on the\nApp Store.")
+//                    .font(.body)
+//                    .multilineTextAlignment(.center)
+//                    .foregroundColor(.secondary)
+//
+//                // Five interactive stars
+//                HStack(spacing: 10) {
+//                    ForEach(1...5, id: \.self) { index in
+//                        Button(action: {
+//                            handleStarTap(index)
+//                        }) {
+//                            Image(systemName: index <= selectedStarRating ? "star.fill" : "star")
+//                                .font(.system(size: 30))
+//                                .foregroundColor(.blue)
+//                        }
+//                        .buttonStyle(PlainButtonStyle())
+//                    }
+//                }
+//                .padding(.vertical, 10)
+//
+//                // Bottom buttons area
+//                if hasTappedStars {
+//                    // Always show Cancel and Submit once user has tapped stars
+//                    HStack {
+//                        Button("Cancel") {
+//                            selectedStarRating = 0
+//                            hasTappedStars = false  // Reset for next time - this ensures next popup starts with "Not Now"
+//                            showRatingPrompt = false
+//                            startUsageTracking()  // Start timer for next 20 seconds
+//                        }
+//                        .font(.body)
+//                        .foregroundColor(.blue)
+//
+//                        Spacer()
+//
+//                        Button("Submit") {
+//                            openAppStoreRating()
+//                            markRatingPrompted()
+//                            showRatingPrompt = false
+//                            selectedStarRating = 0  // Reset for next time
+//                            hasTappedStars = false  // Reset for next time
+//                        }
+//                        .font(.body)
+//                        .foregroundColor(.blue)
+//                    }
+//                } else {
+//                    // Show "Not Now" only when user hasn't tapped stars yet
+//                    Button("Not Now") {
+//                        print("⭐ User selected 'Not Now' - restarting timer")
+//                        showRatingPrompt = false
+//                        startUsageTracking()
+//                    }
+//                    .font(.body)
+//                    .foregroundColor(.blue)
+//               }
+//           }
+//            .padding(30)
+//            .background(colorScheme == .dark ? Color(UIColor.systemGray5) : Color(UIColor.systemGray6))
+//            .cornerRadius(20)
+//            .shadow(radius: 10)
+//           .frame(maxWidth: 300)
+//       }
 //    }
 //
 //    // MARK: - Alert Helper
@@ -3047,9 +3100,11 @@
 //                   abs(a1 - a2) < tolerance
 //        }
 //    
-//    // Updated ensureCharacterOptions function (UPDATED - Proper Voice Defaults)
 //    /// Makes sure every character has a default entry in `characterOptions`
 //    private func ensureCharacterOptions() {
+//        print("🔧 === ensureCharacterOptions() START ===")
+//        print("🔧 Current characterOptions before: \(characterOptions.keys)")
+//        
 //        // Determine the appropriate gray color based on color scheme
 //        let defaultGrayColor: Color
 //        if colorScheme == .dark {
@@ -3060,82 +3115,111 @@
 //            defaultGrayColor = Color.gray.opacity(0.15)
 //        }
 //        
+//        print("🔧 Default gray color: \(defaultGrayColor)")
+//        print("🔧 Characters list: \(characters)")
+//        
 //        // Create basic options for characters that don't have them yet
 //        for name in characters where characterOptions[name] == nil {
 //            characterOptions[name] = CharacterOptions(
 //                voiceID: "", // Will be assigned in assignUniqueVoices
 //                highlight: SerializableColor(defaultGrayColor)
 //            )
+//            print("🔧 Created default options for: \(name)")
 //        }
 //        
 //        // Assign unique voices to all characters
 //        assignUniqueVoices()
 //        
+//        // Create a safer way to print the character options
+//        var characterOptionsSummary: [String: String] = [:]
+//        for (key, value) in characterOptions {
+//            characterOptionsSummary[key] = "voice: \(value.voiceID.prefix(10))..., color: \(value.highlight.r),\(value.highlight.g),\(value.highlight.b)"
+//        }
+//        print("🔧 Final characterOptions after: \(characterOptionsSummary)")
+//        print("🔧 === ensureCharacterOptions() END ===")
 //    }
 //
 //    // MARK: - Update highlight colors when selection changes
 //    private func updateHighlightColors() {
-//            // Carefully selected colors that are visually very distinct from each other
-//            let allColors: [Color] = [
-//                Color.red,                                    // Bright red
-//                Color.blue,                                   // Bright blue
-//                Color.green,                                  // Bright green
-//                Color.yellow,                                 // Bright yellow
-//                Color.purple,                                 // Bright purple
-//                Color.orange,                                 // Bright orange
-//                Color.pink,                                   // Bright pink
-//                Color.cyan,                                   // Bright cyan
-//                Color.brown,                                  // Brown
-//                Color.gray,                                   // Gray
-//                Color(red: 0.0, green: 0.0, blue: 0.0),     // Black
-//                Color(red: 1.0, green: 0.0, blue: 1.0),     // Magenta
-//                Color(red: 0.5, green: 0.0, blue: 0.5),     // Dark purple
-//                Color(red: 0.0, green: 0.5, blue: 0.0),     // Dark green
-//                Color(red: 0.5, green: 0.5, blue: 0.0),     // Olive
-//                Color(red: 0.0, green: 0.5, blue: 0.5),     // Teal
-//                Color(red: 0.5, green: 0.0, blue: 0.0),     // Dark red
-//                Color(red: 0.0, green: 0.0, blue: 0.5),     // Navy blue
-//                Color(red: 1.0, green: 0.5, blue: 0.0),     // Orange-red
-//                Color(red: 0.5, green: 1.0, blue: 0.0),     // Lime green
-//                Color(red: 0.0, green: 1.0, blue: 0.5),     // Spring green
-//                Color(red: 0.5, green: 0.0, blue: 1.0),     // Blue-violet
-//                Color(red: 1.0, green: 0.0, blue: 0.5),     // Rose
-//                Color(red: 0.0, green: 0.5, blue: 1.0)      // Sky blue
-//            ]
+//        print("🌈 === updateHighlightColors() START ===")
+//        print("🌈 selectedCharacters: \(selectedCharacters)")
+//        print("🌈 isLoadedScript: \(isLoadedScript)")
+//        
+//        // Check if user has already customized colors - if so, DON'T override them
+//        // BUT exclude restricted colors (white/black/gray) from being considered "custom"
+//        let hasCustomColors = characterOptions.values.contains { option in
+//            let color = option.highlight.swiftUIColor
+//            let defaultDarkGray = Color.gray.opacity(0.3)
+//            let defaultLightGray = Color.gray.opacity(0.15)
 //            
-//            // Get only the selected characters in a consistent order
-//            let selectedCharactersList = characters.filter { character in
-//                selectedCharacters.contains(where: { $0.caseInsensitiveCompare(character) == .orderedSame })
-//            }
+//            // Check if it's not a default gray AND not a restricted color
+//            let isNotDefaultGray = !colorsAreEqual(color, defaultDarkGray) && !colorsAreEqual(color, defaultLightGray)
+//            let isNotRestrictedColor = !isRestrictedColor(color)
 //            
-//            // Determine the appropriate gray color based on color scheme
-//            let nonSelectedGrayColor: Color
-//            if colorScheme == .dark {
-//                // Dark mode: use darker gray
-//                nonSelectedGrayColor = Color.gray.opacity(0.3)
+//            return isNotDefaultGray && isNotRestrictedColor
+//        }
+//        
+//        print("🌈 hasCustomColors: \(hasCustomColors)")
+//        
+//        if hasCustomColors {
+//            print("🌈 Valid custom colors detected - preserving existing colors, not applying defaults")
+//            return // Don't override custom colors
+//        }
+//        
+//        // Only apply default color scheme if no valid custom colors exist
+//        print("🌈 No valid custom colors - applying default color scheme")
+//        
+//        // Rest of the original logic for default colors...
+//        let allColors: [Color] = [
+//            Color.red, Color.blue, Color.green, Color.yellow, Color.purple, Color.orange,
+//            Color.pink, Color.cyan, Color.brown,
+//            Color(red: 1.0, green: 0.0, blue: 1.0),     // Magenta
+//            Color(red: 0.5, green: 0.0, blue: 0.5),     // Dark purple
+//            Color(red: 0.0, green: 0.5, blue: 0.0),     // Dark green
+//            Color(red: 0.5, green: 0.5, blue: 0.0),     // Olive
+//            Color(red: 0.0, green: 0.5, blue: 0.5),     // Teal
+//            Color(red: 0.5, green: 0.0, blue: 0.0),     // Dark red
+//            Color(red: 0.0, green: 0.0, blue: 0.5),     // Navy blue
+//            Color(red: 1.0, green: 0.5, blue: 0.0),     // Orange-red
+//            Color(red: 0.5, green: 1.0, blue: 0.0),     // Lime green
+//            Color(red: 0.0, green: 1.0, blue: 0.5),     // Spring green
+//            Color(red: 0.5, green: 0.0, blue: 1.0),     // Blue-violet
+//            Color(red: 1.0, green: 0.0, blue: 0.5),     // Rose
+//            Color(red: 0.0, green: 0.5, blue: 1.0)      // Sky blue
+//        ]
+//        
+//        let selectedCharactersList = characters.filter { character in
+//            selectedCharacters.contains(where: { $0.caseInsensitiveCompare(character) == .orderedSame })
+//        }
+//        
+//        let nonSelectedGrayColor: Color
+//        if colorScheme == .dark {
+//            nonSelectedGrayColor = Color.gray.opacity(0.3)
+//        } else {
+//            nonSelectedGrayColor = Color.gray.opacity(0.15)
+//        }
+//        
+//        // Set all characters to gray first
+//        for name in characters {
+//            if characterOptions[name] == nil {
+//                characterOptions[name] = CharacterOptions(
+//                    voiceID: AVSpeechSynthesisVoice.currentLanguageCode(),
+//                    highlight: SerializableColor(nonSelectedGrayColor)
+//                )
 //            } else {
-//                // Light mode: use lighter gray
-//                nonSelectedGrayColor = Color.gray.opacity(0.15)
-//            }
-//            
-//            // First, set all characters to appropriate gray
-//            for name in characters {
-//                if characterOptions[name] == nil {
-//                    characterOptions[name] = CharacterOptions(
-//                        voiceID: AVSpeechSynthesisVoice.currentLanguageCode(),
-//                        highlight: SerializableColor(nonSelectedGrayColor)
-//                    )
-//                } else {
-//                    characterOptions[name]?.highlight = SerializableColor(nonSelectedGrayColor)
-//                }
-//            }
-//            
-//            // Then assign unique colors to selected characters only
-//            for (index, name) in selectedCharactersList.enumerated() {
-//                let colorIndex = index % allColors.count
-//                characterOptions[name]?.highlight = SerializableColor(allColors[colorIndex])
+//                characterOptions[name]?.highlight = SerializableColor(nonSelectedGrayColor)
 //            }
 //        }
+//        
+//        // Then assign unique colors to selected characters only
+//        for (index, name) in selectedCharactersList.enumerated() {
+//            let colorIndex = index % allColors.count
+//            characterOptions[name]?.highlight = SerializableColor(allColors[colorIndex])
+//        }
+//        
+//        print("🌈 Applied default colors to selected characters")
+//        print("🌈 === updateHighlightColors() END ===")
+//    }
 //
 //    // MARK: - Skip Navigation Functions
 //    private func skipBackOneLine() {
@@ -3989,10 +4073,80 @@
 //        isShowingStartingLineSelection = true
 //    }
 //    
+//
+//    // MARK: - Hamburger Menu Navigation
+//
+//    private func navigateToUploadScript() {
+//        // Close the menu first
+//        withAnimation {
+//            isLibraryOpen = false
+//        }
+//        
+//        // Reset all states to go to upload script view
+//        isLoadedScript = false
+//        currentSavedScript = nil
+//        
+//        // Reset upload states
+//        uploadedFileName = ""
+//        fileContent = ""
+//        selectedFileURL = nil
+//        dialogue = []
+//        characters = []
+//        selectedCharacters = []
+//        characterOptions = [:]
+//        scriptName = ""
+//        
+//        // Reset navigation states to show upload view
+//        isShowingHomepage = false
+//        isShowingScriptLibrary = false
+//        hasUploadedFile = false
+//        hasPressedContinue = false
+//        isShowingCharacterCustomization = false
+//        isShowingStartingLineSelection = false
+//        isCharacterSelected = false
+//        
+//        print("📱 Navigated to Upload Script from hamburger menu")
+//    }
+//
+//    private func navigateToScriptLibrary() {
+//        // Close the menu first
+//        withAnimation {
+//            isLibraryOpen = false
+//        }
+//        
+//        // Set states to show script library
+//        isShowingHomepage = false
+//        isShowingScriptLibrary = true
+//        
+//        print("📱 Navigated to Script Library from hamburger menu")
+//    }
 //    
 //    
 //    
 //    // MARK: - Library Helper Functions
+//    
+//    private func deleteScript(_ script: SavedScript) {
+//        // Find the script in the library and remove it using the existing delete method
+//        if let index = libraryManager.scripts.firstIndex(where: { $0.id == script.id }) {
+//            let indexSet = IndexSet(integer: index)
+//            libraryManager.delete(at: indexSet)
+//            print("🗑️ Successfully deleted script: \(script.title)")
+//        }
+//    }
+//    
+//    private func getCharacterHighlightColor(_ characterName: String, script: SavedScript) -> Color {
+//        // Check if this character has saved highlight options
+//        if let characterOption = script.settings.characterOptions[characterName] {
+//            return characterOption.highlight.swiftUIColor
+//        } else {
+//            // Fallback to blue if no saved color found
+//            return .blue
+//        }
+//    }
+//    
+//    private var adaptiveSecondaryColor: Color {
+//        colorScheme == .dark ? .secondary : .black
+//    }
 //    
 //    private func performSave() {
 //        guard let script = currentSavedScript else { return }
