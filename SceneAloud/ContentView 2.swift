@@ -23,8 +23,8 @@
 //}
 //
 //
-//struct SerializableColor: Codable {
-//    var r, g, b, a: Double          // 0…1 range
+//struct SerializableColor: Codable, Equatable {
+//    var r, g, b, a: Double
 //
 //    init(_ color: Color) {
 //        let ui = UIColor(color)
@@ -37,7 +37,6 @@
 //        Color(red: r, green: g, blue: b, opacity: a)
 //    }
 //}
-//
 //
 //struct ContentView: View {
 //    // MARK: - State Variables
@@ -78,13 +77,23 @@
 //    @State private var currentHintLineIndex: Int = -1
 //    @State private var revealedWords: [String] = []
 //    
+//    @State private var isShowingHomepage: Bool = true
+//    @State private var isShowingScriptLibrary: Bool = false
+//    @State private var expandedCharacterLists: Set<UUID> = []
+//    @State private var lastSaveTime: Date = Date()
+//    @State private var pendingSave: Bool = false
+//    @State private var isLoadedScript: Bool = false
+//    
 //    @FocusState private var isScriptNameFocused: Bool
-//
 //    @State private var scriptName: String = ""
 //    @State private var speechSessionId: UUID = UUID()
 //    
+//    @State private var savedCharacterOptions: [String: CharacterOptions] = [:]
+//    
 //    @State private var wasPlayingBeforeRating: Bool = false
 //    @State private var wasPausedBeforeRating: Bool = false
+//    @State private var expandedStartingLines: Set<UUID> = []
+//
 //    
 //    @State private var hasTappedStars: Bool = false
 //    @State private var selectedStarRating: Int = 0
@@ -275,23 +284,36 @@
 //    private var mainContentView: some View {
 //        if isShowingSplash {
 //            splashView
+//                .onAppear { print("🔍 Navigation: Showing splash") }
 //        } else {
 //            NavigationView {
-//                if !hasUploadedFile {
+//                if isShowingHomepage {
+//                    homepageView
+//                        .onAppear { print("🔍 Navigation: Showing homepage") }
+//                } else if isShowingScriptLibrary {
+//                    scriptLibraryView
+//                        .onAppear { print("🔍 Navigation: Showing script library") }
+//                } else if !hasUploadedFile {
 //                    uploadView
+//                        .onAppear { print("🔍 Navigation: Showing upload view - hasUploadedFile: \(hasUploadedFile)") }
 //                } else if !hasPressedContinue {
 //                    continueView
+//                        .onAppear { print("🔍 Navigation: Showing continue view - hasPressedContinue: \(hasPressedContinue)") }
 //                } else if !isShowingCharacterCustomization {
 //                    settingsView
+//                        .onAppear { print("🔍 Navigation: Showing settings view - isShowingCharacterCustomization: \(isShowingCharacterCustomization)") }
 //                } else if !isShowingStartingLineSelection {
 //                    characterCustomizationView
+//                        .onAppear { print("🔍 Navigation: Showing character customization - isShowingStartingLineSelection: \(isShowingStartingLineSelection)") }
 //                } else if !isCharacterSelected {
 //                    startingLineSelectionView
+//                        .onAppear { print("🔍 Navigation: Showing starting line selection - isCharacterSelected: \(isCharacterSelected)") }
 //                } else {
 //                    scriptReadingView
+//                        .onAppear { print("🔍 Navigation: Showing script reading view - ALL CONDITIONS MET") }
 //                }
 //            }
-//            .navigationViewStyle(StackNavigationViewStyle()) // Ensures consistent behavior across devices
+//            .navigationViewStyle(StackNavigationViewStyle())
 //        }
 //    }
 //
@@ -333,7 +355,483 @@
 //        .contentShape(Rectangle())
 //        .onTapGesture {
 //            isShowingSplash = false
+//            isShowingHomepage = true
 //        }
+//    }
+//    
+//    // MARK: - Homepage View
+//    @ViewBuilder
+//    private var homepageView: some View {
+//        VStack(spacing: 30) {
+//            Spacer()
+//            
+//            // App title
+//            Text("SceneAloud")
+//                .font(.largeTitle)
+//                .bold()
+//                .padding(.top, 20)
+//            
+//            Text("Choose an option to get started")
+//                .font(.title2)
+//                .multilineTextAlignment(.center)
+//                .foregroundColor(.secondary)
+//                .padding(.horizontal, 40)
+//            
+//            Spacer()
+//            
+//            // Main action buttons
+//            VStack(spacing: 20) {
+//                // Upload Script button
+//                Button(action: {
+//                    isLoadedScript = false
+//                    isShowingHomepage = false
+//                    // This will navigate to the upload view since hasUploadedFile is still false
+//                }) {
+//                    HStack {
+//                        Image(systemName: "doc.text.fill")
+//                            .font(.title2)
+//                        Text("Upload Script")
+//                            .font(.headline)
+//                    }
+//                    .frame(maxWidth: .infinity)
+//                    .padding()
+//                    .background(Color.blue)
+//                    .foregroundColor(.white)
+//                    .cornerRadius(15)
+//                }
+//                .padding(.horizontal, 40)
+//                
+//                // Library button
+//                Button(action: {
+//                    isShowingHomepage = false
+//                    isShowingScriptLibrary = true
+//                }) {
+//                    HStack {
+//                        Image(systemName: "books.vertical.fill")
+//                            .font(.title2)
+//                        Text("Script Library")
+//                            .font(.headline)
+//                    }
+//                    .frame(maxWidth: .infinity)
+//                    .padding()
+//                    .background(Color.green)
+//                    .foregroundColor(.white)
+//                    .cornerRadius(15)
+//                }
+//                .padding(.horizontal, 40)
+//            }
+//            
+//            Spacer()
+//            Spacer()
+//        }
+//        .navigationTitle("")
+//        .navigationBarTitleDisplayMode(.inline)
+//        .toolbar {
+//            // No hamburger button on homepage as requested
+//            ToolbarItem(placement: .principal) {
+//                Text("")
+//                    .foregroundColor(.clear)
+//            }
+//        }
+//    }
+//    
+//    // MARK: - Script Library View
+//    @ViewBuilder
+//    private var scriptLibraryView: some View {
+//        VStack(spacing: 0) {
+//            // Header
+//            VStack {
+//                Text("Script Library")
+//                    .font(.largeTitle)
+//                    .bold()
+//                    .padding(.top, 20)
+//                    .padding(.bottom, 10)
+//            }
+//            .padding(.horizontal, 20)
+//            
+//            // Scripts list
+//            if libraryManager.scripts.isEmpty {
+//                // Empty state
+//                VStack(spacing: 15) {
+//                    Spacer()
+//                    Image(systemName: "books.vertical")
+//                        .font(.system(size: 60))
+//                        .foregroundColor(.gray)
+//                    
+//                    Text("No Saved Scripts")
+//                        .font(.title2)
+//                        .bold()
+//                        .foregroundColor(.primary)
+//                    
+//                    Text("Scripts you rehearse will appear here")
+//                        .font(.body)
+//                        .foregroundColor(.secondary)
+//                        .multilineTextAlignment(.center)
+//                    
+//                    Spacer()
+//                }
+//                .frame(maxWidth: .infinity)
+//                .padding(.horizontal, 40)
+//            } else {
+//                // Scripts list
+//                ScrollView {
+//                    LazyVStack(spacing: 15) {
+//                        ForEach(libraryManager.scripts.sorted(by: { $0.dateSaved > $1.dateSaved })) { script in
+//                            scriptLibraryCard(for: script)
+//                        }
+//                    }
+//                    .padding(.horizontal, 20)
+//                    .padding(.vertical, 10)
+//                }
+//            }
+//        }
+//        .navigationTitle("")
+//        .navigationBarTitleDisplayMode(.inline)
+//        .toolbar {
+//            ToolbarItem(placement: .principal) {
+//                Text("")
+//                    .foregroundColor(.clear)
+//            }
+//            ToolbarItem(placement: .navigationBarLeading) {
+//                Button(action: {
+//                    isShowingScriptLibrary = false
+//                    isShowingHomepage = true
+//                }) {
+//                    HStack {
+//                        Image(systemName: "arrow.left")
+//                        Text("Back")
+//                    }
+//                }
+//            }
+//        }
+//    }
+//    
+//    // MARK: - Script Library Card
+//    @ViewBuilder
+//    private func scriptLibraryCard(for script: SavedScript) -> some View {
+//        VStack(alignment: .leading, spacing: 12) {
+//            // Script Title
+//            Text(script.title)
+//                .font(.headline)
+//                .bold()
+//                .frame(maxWidth: .infinity, alignment: .leading)
+//            
+//            // Character Names
+//            VStack(alignment: .leading, spacing: 4) {
+//                Text("Characters:")
+//                    .font(.subheadline)
+//                    .foregroundColor(.secondary)
+//                
+//                let allCharacters = getCharacterNamesForScript(script)
+//                let isJustListening = script.settings.selectedCharacters.contains("Just Listening") || script.settings.selectedCharacters.contains("Not Applicable")
+//                
+//                if isJustListening {
+//                    // When "Just Listening" is selected, show it first, then all other characters
+//                    let isExpanded = expandedCharacterLists.contains(script.id)
+//                    let hasMoreCharacters = allCharacters.count > 3
+//                    
+//                    Button(action: {
+//                        if isExpanded {
+//                            expandedCharacterLists.remove(script.id)
+//                        } else {
+//                            expandedCharacterLists.insert(script.id)
+//                        }
+//                    }) {
+//                        VStack(alignment: .leading, spacing: 2) {
+//                            // Show "Just Listening" first (highlighted as the user's selection)
+//                            Text("Just Listening")
+//                                .font(.subheadline)
+//                                .foregroundColor(.blue)
+//                                .bold()
+//                                .padding(.leading, 8)
+//                            
+//                            // Show other characters based on expanded state
+//                            if isExpanded {
+//                                // Show all characters when expanded
+//                                ForEach(allCharacters, id: \.self) { characterName in
+//                                    Text(characterName.capitalized)
+//                                        .font(.subheadline)
+//                                        .foregroundColor(.secondary)
+//                                        .padding(.leading, 8)
+//                                }
+//                            } else {
+//                                // Show limited characters when collapsed
+//                                let displayCharacters = allCharacters.prefix(3)
+//                                ForEach(Array(displayCharacters), id: \.self) { characterName in
+//                                    Text(characterName.capitalized)
+//                                        .font(.subheadline)
+//                                        .foregroundColor(.secondary)
+//                                        .padding(.leading, 8)
+//                                }
+//                                
+//                                // Add "..." if there are more characters and not expanded
+//                                if hasMoreCharacters {
+//                                    Text("... and \(allCharacters.count - 3) more (tap to expand)")
+//                                        .font(.caption)
+//                                        .foregroundColor(.blue)
+//                                        .italic()
+//                                        .padding(.leading, 8)
+//                                }
+//                            }
+//                            
+//                            // Add "tap to collapse" hint when expanded and there were originally more characters
+//                            if isExpanded && hasMoreCharacters {
+//                                Text("(tap to collapse)")
+//                                    .font(.caption)
+//                                    .foregroundColor(.blue)
+//                                    .italic()
+//                                    .padding(.leading, 8)
+//                            }
+//                        }
+//                        .frame(maxWidth: .infinity, alignment: .leading)
+//                    }
+//                    .buttonStyle(PlainButtonStyle())
+//                    .disabled(!hasMoreCharacters) // Only make it tappable if there are more characters to show
+//                    
+//                } else {
+//                    // Show actual script characters when user is playing specific characters
+//                    let userCharacters = script.settings.selectedCharacters.filter { character in
+//                        // Make sure the character actually exists in the script AND isn't the old "Not Applicable"
+//                        character != "Not Applicable" && allCharacters.contains { $0.caseInsensitiveCompare(character) == .orderedSame }
+//                    }
+//                    let otherCharacters = allCharacters.filter { character in
+//                        // Characters that the user is NOT playing
+//                        !script.settings.selectedCharacters.contains { $0.caseInsensitiveCompare(character) == .orderedSame }
+//                    }
+//                    
+//                    let isExpanded = expandedCharacterLists.contains(script.id)
+//                    let hasMoreCharacters = otherCharacters.count > 3
+//                    
+//                    Button(action: {
+//                        if isExpanded {
+//                            expandedCharacterLists.remove(script.id)
+//                        } else {
+//                            expandedCharacterLists.insert(script.id)
+//                        }
+//                    }) {
+//                        VStack(alignment: .leading, spacing: 2) {
+//                            // Show user's characters first (the ones they're actually playing)
+//                            if !userCharacters.isEmpty {
+//                                ForEach(userCharacters, id: \.self) { characterName in
+//                                    Text(characterName.capitalized)
+//                                        .font(.subheadline)
+//                                        .foregroundColor(.blue)
+//                                        .bold()
+//                                        .padding(.leading, 8)
+//                                }
+//                            }
+//                            
+//                            // Show other characters based on expanded state
+//                            if isExpanded {
+//                                // Show all other characters when expanded
+//                                ForEach(otherCharacters, id: \.self) { characterName in
+//                                    Text(characterName.capitalized)
+//                                        .font(.subheadline)
+//                                        .foregroundColor(.secondary)
+//                                        .padding(.leading, 8)
+//                                }
+//                            } else {
+//                                // Show limited other characters when collapsed
+//                                let displayOtherCharacters = otherCharacters.prefix(3)
+//                                ForEach(Array(displayOtherCharacters), id: \.self) { characterName in
+//                                    Text(characterName.capitalized)
+//                                        .font(.subheadline)
+//                                        .foregroundColor(.secondary)
+//                                        .padding(.leading, 8)
+//                                }
+//                                
+//                                // Add "..." if there are more characters and not expanded
+//                                if hasMoreCharacters {
+//                                    Text("... and \(otherCharacters.count - 3) more (tap to expand)")
+//                                        .font(.caption)
+//                                        .foregroundColor(.blue)
+//                                        .italic()
+//                                        .padding(.leading, 8)
+//                                }
+//                            }
+//                            
+//                            // Add "tap to collapse" hint when expanded and there were originally more characters
+//                            if isExpanded && hasMoreCharacters {
+//                                Text("(tap to collapse)")
+//                                    .font(.caption)
+//                                    .foregroundColor(.blue)
+//                                    .italic()
+//                                    .padding(.leading, 8)
+//                            }
+//                            
+//                            // Show message if no characters found (shouldn't happen but just in case)
+//                            if userCharacters.isEmpty && otherCharacters.isEmpty {
+//                                Text("No characters found")
+//                                    .font(.caption)
+//                                    .foregroundColor(.secondary)
+//                                    .italic()
+//                                    .padding(.leading, 8)
+//                            }
+//                        }
+//                        .frame(maxWidth: .infinity, alignment: .leading)
+//                    }
+//                    .buttonStyle(PlainButtonStyle())
+//                    .disabled(!hasMoreCharacters) // Only make it tappable if there are more characters to show
+//                }
+//            }
+//            
+//            // Settings
+//            VStack(alignment: .leading, spacing: 4) {
+//                Text("Settings:")
+//                    .font(.subheadline)
+//                    .foregroundColor(.secondary)
+//                
+//                HStack(spacing: 15) {
+//                    Text("Display lines as read")
+//                        .font(.caption)
+//                        .foregroundColor(script.settings.displayLinesAsRead ? .green : .secondary)
+//                    
+//                    Text("Display my lines")
+//                        .font(.caption)
+//                        .foregroundColor(script.settings.displayMyLines ? .green : .secondary)
+//                    
+//                    Text("Hints")
+//                        .font(.caption)
+//                        .foregroundColor(script.settings.showHints ? .green : .secondary)
+//                }
+//            }
+//            
+//            // Starting Line
+//            VStack(alignment: .leading, spacing: 4) {
+//                let startingLineInfo = getStartingLineInfo(script)
+//                let isExpanded = expandedStartingLines.contains(script.id)
+//                let shouldTruncate = startingLineInfo.line.count > 50 && startingLineInfo.line != "End of script"
+//                
+//                HStack {
+//                    Text("Starting line:")
+//                        .font(.subheadline)
+//                        .foregroundColor(.secondary)
+//                    Spacer()
+//                }
+//                
+//                if shouldTruncate {
+//                    Button(action: {
+//                        if isExpanded {
+//                            expandedStartingLines.remove(script.id)
+//                        } else {
+//                            expandedStartingLines.insert(script.id)
+//                        }
+//                    }) {
+//                        VStack(alignment: .leading, spacing: 2) {
+//                            if isExpanded {
+//                                // Show full text with character name in bold - consistent alignment
+//                                VStack(alignment: .leading, spacing: 0) {
+//                                    Text(startingLineInfo.character + ":")
+//                                        .font(.caption)
+//                                        .bold()
+//                                        .foregroundColor(.primary)
+//                                        .frame(maxWidth: .infinity, alignment: .leading)
+//                                    Text(startingLineInfo.line)
+//                                        .font(.caption)
+//                                        .foregroundColor(.primary)
+//                                        .frame(maxWidth: .infinity, alignment: .leading)
+//                                }
+//                            } else {
+//                                // Show truncated text with character name bold
+//                                VStack(alignment: .leading, spacing: 0) {
+//                                    Text(startingLineInfo.character + ":")
+//                                        .font(.caption)
+//                                        .bold()
+//                                        .foregroundColor(.primary)
+//                                        .frame(maxWidth: .infinity, alignment: .leading)
+//                                    Text(String(startingLineInfo.line.prefix(50)) + "...")
+//                                        .font(.caption)
+//                                        .foregroundColor(.primary)
+//                                        .frame(maxWidth: .infinity, alignment: .leading)
+//                                }
+//                            }
+//                            
+//                            // Add expand/collapse hint
+//                            Text(isExpanded ? "(tap to collapse)" : "(tap to expand)")
+//                                .font(.caption)
+//                                .foregroundColor(.blue)
+//                                .italic()
+//                                .frame(maxWidth: .infinity, alignment: .leading)
+//                        }
+//                        .frame(maxWidth: .infinity, alignment: .leading)
+//                    }
+//                    .buttonStyle(PlainButtonStyle())
+//                } else {
+//                    // Show full text with character name in bold when no truncation needed
+//                    if startingLineInfo.character.isEmpty {
+//                        Text(startingLineInfo.line)
+//                            .font(.caption)
+//                            .foregroundColor(.primary)
+//                            .frame(maxWidth: .infinity, alignment: .leading)
+//                    } else {
+//                        VStack(alignment: .leading, spacing: 0) {
+//                            Text(startingLineInfo.character + ":")
+//                                .font(.caption)
+//                                .bold()
+//                                .foregroundColor(.primary)
+//                                .frame(maxWidth: .infinity, alignment: .leading)
+//                            Text(startingLineInfo.line)
+//                                .font(.caption)
+//                                .foregroundColor(.primary)
+//                                .frame(maxWidth: .infinity, alignment: .leading)
+//                        }
+//                    }
+//                }
+//            }
+//            
+//            // Progress Snippet
+//            VStack(alignment: .leading, spacing: 8) {
+//                Text("Progress:")
+//                    .font(.subheadline)
+//                    .foregroundColor(.secondary)
+//                
+//                VStack(alignment: .leading, spacing: 4) {
+//                    let snippet = getProgressSnippet(script)
+//                    ForEach(Array(snippet.enumerated()), id: \.offset) { index, entry in
+//                        VStack(alignment: .leading, spacing: 2) {
+//                            Text(entry.character)
+//                                .font(.caption)
+//                                .bold()
+//                                .foregroundColor(.primary)
+//                            
+//                            Text(entry.line)
+//                                .font(.caption)
+//                                .padding(4)
+//                                .background(
+//                                    entry.isCurrentLine ?
+//                                    getColorForCharacterInScript(entry.character, script: script).opacity(0.7) :
+//                                    getColorForCharacterInScript(entry.character, script: script).opacity(0.3)
+//                                )
+//                                .cornerRadius(4)
+//                                .frame(maxWidth: .infinity, alignment: .leading)
+//                        }
+//                    }
+//                }
+//                .padding(8)
+//                .background(Color.gray.opacity(0.1))
+//                .cornerRadius(8)
+//            }
+//            Button(action: {
+//                loadScriptFromLibrary(script)
+//            }) {
+//                HStack {
+//                    Image(systemName: "play.fill")
+//                        .font(.body)
+//                    Text("Load Script")
+//                        .font(.headline)
+//                }
+//                .frame(maxWidth: .infinity)
+//                .padding()
+//                .background(Color.blue)
+//                .foregroundColor(.white)
+//                .cornerRadius(10)
+//            }
+//            .padding(.top, 10)
+//        }
+//        .padding(15)
+//        .background(Color(UIColor.secondarySystemBackground))
+//        .cornerRadius(12)
+//        .shadow(color: .black.opacity(0.1), radius: 2, x: 0, y: 1)
 //    }
 //
 //    // MARK: - Upload View
@@ -369,10 +867,29 @@
 //        .navigationTitle("")
 //        .navigationBarTitleDisplayMode(.inline)
 //        .toolbar {
-//            // Add invisible title to enable navigation bar
+//            // Invisible title to enable navigation bar
 //            ToolbarItem(placement: .principal) {
 //                Text("")
 //                    .foregroundColor(.clear)
+//            }
+//            ToolbarItem(placement: .navigationBarLeading) {
+//                Button(action: {
+//                    // Reset any uploaded content and go back to homepage
+//                    uploadedFileName = ""
+//                    fileContent = ""
+//                    selectedFileURL = nil
+//                    dialogue = []
+//                    characters = []
+//                    selectedCharacters = []
+//                    hasUploadedFile = false
+//                    hasPressedContinue = false
+//                    isShowingHomepage = true
+//                }) {
+//                    HStack {
+//                        Image(systemName: "arrow.left")
+//                        Text("Back")
+//                    }
+//                }
 //            }
 //            ToolbarItem(placement: .navigationBarTrailing) {
 //                Button(action: {
@@ -578,26 +1095,69 @@
 //    // MARK: - Text File Input View
 //    @ViewBuilder
 //    private var textFileInputView: some View {
-//        Button(action: {
-//            isShowingDocumentPicker = true
-//        }) {
-//            HStack {
-//                Image(systemName: "doc.text.fill")
-//                    .font(.title)
-//                Text("Select Text File")
+//        VStack(spacing: 20) {
+//            // Format guidance section
+//            VStack(alignment: .leading, spacing: 12) {
+//                Text("Text File Format:")
 //                    .font(.headline)
+//                    .foregroundColor(.primary)
+//                
+//                Text("Your text file should be formatted with each line as:")
+//                    .font(.subheadline)
+//                    .foregroundColor(.secondary)
+//                    .multilineTextAlignment(.leading)
+//                    .fixedSize(horizontal: false, vertical: true)
+//                
+//                Text("Character Name: Line of dialogue")
+//                    .font(.body)
+//                    .fontWeight(.medium)
+//                    .multilineTextAlignment(.leading)
+//                    .fixedSize(horizontal: false, vertical: true)
+//                    .padding(.horizontal, 12)
+//                    .padding(.vertical, 8)
+//                    .background(Color(UIColor.secondarySystemBackground))
+//                    .cornerRadius(8)
+//                
+//                Text("Example:")
+//                    .font(.subheadline)
+//                    .foregroundColor(.secondary)
+//                    .padding(.top, 4)
+//                
+//                VStack(alignment: .leading, spacing: 2) {
+//                    Text("JOHN: Hello, how are you today?")
+//                    Text("MARY: I'm doing great, thanks for asking!")
+//                    Text("JOHN: That's wonderful to hear.")
+//                }
+//                .font(.caption)
+//                .padding(.horizontal, 12)
+//                .padding(.vertical, 8)
+//                .background(Color.blue.opacity(0.1))
+//                .cornerRadius(8)
 //            }
-//            .padding()
-//            .foregroundColor(.white)
-//            .background(Color.blue)
-//            .cornerRadius(10)
-//        }
-//        .sheet(isPresented: $isShowingDocumentPicker) {
-//            DocumentPicker(filePath: $selectedFileURL, allowedContentTypes: [UTType.plainText])
-//        }
-//        .onChange(of: selectedFileURL) { _, newValue in
-//            if let url = newValue {
-//                handleFileSelection(url: url)
+//            .padding(.horizontal, 20)
+//            
+//            // Upload button
+//            Button(action: {
+//                isShowingDocumentPicker = true
+//            }) {
+//                HStack {
+//                    Image(systemName: "doc.text.fill")
+//                        .font(.title)
+//                    Text("Select Text File")
+//                        .font(.headline)
+//                }
+//                .padding()
+//                .foregroundColor(.white)
+//                .background(Color.blue)
+//                .cornerRadius(10)
+//            }
+//            .sheet(isPresented: $isShowingDocumentPicker) {
+//                DocumentPicker(filePath: $selectedFileURL, allowedContentTypes: [UTType.plainText])
+//            }
+//            .onChange(of: selectedFileURL) { _, newValue in
+//                if let url = newValue {
+//                    handleFileSelection(url: url)
+//                }
 //            }
 //        }
 //    }
@@ -1400,6 +1960,15 @@
 //        } message: {
 //            colorDuplicateAlertMessage
 //        }
+//        .onAppear {
+//            // Restore saved character options if they exist
+//            if !savedCharacterOptions.isEmpty {
+//                characterOptions = savedCharacterOptions
+//                print("🎨 Restored character options: \(characterOptions.keys)")
+//            }
+//            ensureCharacterOptions()
+//            updateHighlightColors()
+//        }
 //    }
 //    
 //    // MARK: - Character Customization Button Section
@@ -1407,7 +1976,20 @@
 //    private var characterCustomizationButtonSection: some View {
 //        VStack {
 //            Button(action: {
-//                isShowingStartingLineSelection = true
+//                if isLoadedScript {
+//                    // For loaded scripts: set all states needed to reach script reading view
+//                    isShowingStartingLineSelection = true  // This needs to be true
+//                    isCharacterSelected = true             // This makes it go to script reading
+//                    print("📖 Loaded script: going directly back to script reading")
+//                } else {
+//                    // For new scripts: preserve starting line selection before going to starting line view
+//                    if selectedStartingLineIndex == nil && hasSetStartingLine {
+//                        selectedStartingLineIndex = startingLineIndex
+//                        print("📝 New script: preserved starting line selection: \(startingLineIndex)")
+//                    }
+//                    isShowingStartingLineSelection = true
+//                    print("📝 New script: going to starting line selection")
+//                }
 //            }) {
 //                Text("Continue")
 //                    .font(.headline)
@@ -1432,16 +2014,18 @@
 //                VStack(alignment: .leading, spacing: 10) {
 //                    // Custom title and description at the top of scrollable content
 //                    VStack(spacing: 10) {
-//                        Text("Select Starting Line")
-//                            .font(.largeTitle)
-//                            .bold()
-//                            .padding(.top, 20)
+//                        Text(isLoadedScript ? "Starting Line (Locked)" : "Select Starting Line")
+//                                .font(.largeTitle)
+//                                .bold()
+//                                .padding(.top, 20)
 //                        
-//                        Text("Please select the line you would like to start rehearsing from.")
-//                            .font(.title2)
-//                            .multilineTextAlignment(.center)
-//                            .padding(.horizontal, 20)
-//                            .padding(.bottom, 20)
+//                        Text(isLoadedScript ?
+//                                 "The starting line is locked for saved scripts. Your progress continues from where you left off." :
+//                                 "Please select the line you would like to start rehearsing from.")
+//                                .font(.title2)
+//                                .multilineTextAlignment(.center)
+//                                .padding(.horizontal, 20)
+//                                .padding(.bottom, 20)
 //                    }
 //                    
 //                    // Script lines
@@ -1475,20 +2059,24 @@
 //                        .id(index)
 //                        .contentShape(Rectangle()) // Makes entire area tappable
 //                        .onTapGesture {
-//                            if selectedStartingLineIndex == index {
-//                                // Tapping the same line again deselects it
-//                                selectedStartingLineIndex = nil
-//                            } else {
-//                                // Check if this is the last line
-//                                if index == dialogue.count - 1 {
-//                                    // Show warning for last line
-//                                    showLastLineWarning = true
-//                                    selectedStartingLineIndex = index // Still select it, but show warning
+//                            // Only allow selection if not a loaded script
+//                            if !isLoadedScript {
+//                                if selectedStartingLineIndex == index {
+//                                    // Tapping the same line again deselects it
+//                                    selectedStartingLineIndex = nil
 //                                } else {
-//                                    // Select this line normally
-//                                    selectedStartingLineIndex = index
+//                                    // Check if this is the last line
+//                                    if index == dialogue.count - 1 {
+//                                        // Show warning for last line
+//                                        showLastLineWarning = true
+//                                        selectedStartingLineIndex = index // Still select it, but show warning
+//                                    } else {
+//                                        // Select this line normally
+//                                        selectedStartingLineIndex = index
+//                                    }
 //                                }
 //                            }
+//                            // If isLoadedScript is true, tapping does nothing
 //                        }
 //                    }
 //                }
@@ -1500,10 +2088,27 @@
 //            // Continue button at bottom (stays fixed)
 //            VStack {
 //                Button(action: {
-//                    if let startingIndex = selectedStartingLineIndex {
-//                        startingLineIndex = startingIndex
-//                        currentUtteranceIndex = startingIndex
-//                        hasSetStartingLine = true
+//                    if isLoadedScript {
+//                        // For loaded scripts, keep the original progress, don't reset to starting line
+//                        // startingLineIndex stays the same, currentUtteranceIndex stays the same
+//                        // Don't change anything - just proceed
+//                        print("📖 Loaded script: keeping progress at \(currentUtteranceIndex), starting at \(startingLineIndex)")
+//                    } else {
+//                        // For new scripts, check if this is the initial setup or returning from navigation
+//                        if let startingIndex = selectedStartingLineIndex {
+//                            startingLineIndex = startingIndex
+//                            
+//                            // Only reset currentUtteranceIndex if this is the initial setup
+//                            // If currentUtteranceIndex is already ahead of startingLineIndex, preserve it
+//                            if currentUtteranceIndex < startingLineIndex {
+//                                currentUtteranceIndex = startingIndex
+//                                print("📝 New script: initial setup - set progress to starting line \(startingIndex)")
+//                            } else {
+//                                print("📝 New script: returning from navigation - keeping progress at \(currentUtteranceIndex)")
+//                            }
+//                            
+//                            hasSetStartingLine = true
+//                        }
 //                    }
 //                    isCharacterSelected = true
 //                }) {
@@ -1511,11 +2116,11 @@
 //                        .font(.headline)
 //                        .frame(maxWidth: .infinity)
 //                        .padding()
-//                        .background(selectedStartingLineIndex != nil ? Color.blue : Color.gray)
+//                        .background((isLoadedScript || selectedStartingLineIndex != nil) ? Color.blue : Color.gray)
 //                        .foregroundColor(.white)
 //                        .cornerRadius(10)
 //                }
-//                .disabled(selectedStartingLineIndex == nil)
+//                .disabled(!isLoadedScript && selectedStartingLineIndex == nil)
 //                .padding(.horizontal, 20)
 //                .padding(.bottom, 20)
 //                .padding(.top, 10)
@@ -1533,7 +2138,6 @@
 //            ToolbarItem(placement: .navigationBarLeading) {
 //                Button(action: {
 //                    selectedStartingLineIndex = nil
-//                    hasSetStartingLine = false
 //                    isShowingStartingLineSelection = false
 //                }) {
 //                    HStack {
@@ -1564,6 +2168,22 @@
 //            }
 //        } message: {
 //            Text("Error: You have selected the very last line of the script. Are you sure you want to rehearse that?")
+//        }
+//        
+//        .onAppear {
+//            print("🔍 Starting line view appeared")
+//            print("🔍 selectedStartingLineIndex: \(selectedStartingLineIndex)")
+//            print("🔍 startingLineIndex: \(startingLineIndex)")
+//            print("🔍 hasSetStartingLine: \(hasSetStartingLine)")
+//            print("🔍 isLoadedScript: \(isLoadedScript)")
+//            
+//            // Restore starting line selection if it was set
+//            if selectedStartingLineIndex == nil && hasSetStartingLine {
+//                selectedStartingLineIndex = startingLineIndex
+//                print("🎯 Restored starting line selection on appear: \(startingLineIndex)")
+//            } else {
+//                print("🔍 No restoration needed - selectedStartingLineIndex already set or hasSetStartingLine is false")
+//            }
 //        }
 //    }
 //    
@@ -1599,6 +2219,26 @@
 //                    }
 //                }
 //                .background(Color(UIColor.systemBackground))
+//                .onAppear {
+//                    initializeSpeech()
+//                    startUsageTracking() // Start tracking usage time
+//                        
+//                    // Auto-save new scripts when they first reach the script reading view
+//                    if currentSavedScript == nil {
+//                        print("💾 Auto-saving new script: \(scriptName)")
+//                        saveCurrentScript()
+//                    } else {
+//                        print("📖 Continuing existing script: \(currentSavedScript?.title ?? "Unknown")")
+//                            
+//                        // Auto-scroll to current progress position with a small delay
+//                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+//                            withAnimation(.easeInOut(duration: 1.0)) {
+//                                proxy.scrollTo(currentUtteranceIndex, anchor: .center)
+//                            }
+//                            print("📍 Auto-scrolled to progress line: \(currentUtteranceIndex)")
+//                        }
+//                    }
+//                }
 //            }
 //            .background(Color(UIColor.systemBackground))
 //
@@ -1611,8 +2251,30 @@
 //                Button(action: {
 //                    // Auto-pause speech when going back
 //                    pauseSpeechForNavigation()
-//                    // Go back to starting line selection
-//                    isCharacterSelected = false
+//                    
+//                    // Save current progress before going back
+//                    if currentSavedScript != nil {
+//                        saveCurrentScript()
+//                        print("💾 Saved progress before going back")
+//                    }
+//                    
+//                    print("🔍 Before navigation - startingLineIndex: \(startingLineIndex)")
+//                    print("🔍 Before navigation - selectedStartingLineIndex: \(selectedStartingLineIndex)")
+//                    print("🔍 Before navigation - hasSetStartingLine: \(hasSetStartingLine)")
+//                    
+//                    if isLoadedScript {
+//                        // For loaded scripts: skip starting line selection, go directly to character customization
+//                        isCharacterSelected = false
+//                        isShowingStartingLineSelection = false
+//                        print("⬅️ Loaded script: going directly to character customization")
+//                    } else {
+//                        // For new scripts: normal flow through starting line selection
+//                        isCharacterSelected = false
+//                        isShowingStartingLineSelection = true
+//                        print("⬅️ New script: going to starting line selection")
+//                    }
+//                    
+//                    print("⬅️ Navigating back - isLoadedScript: \(isLoadedScript)")
 //                }) {
 //                    HStack {
 //                        Image(systemName: "arrow.left")
@@ -1631,10 +2293,6 @@
 //                }
 //                .accessibilityLabel("Main menu")
 //            }
-//        }
-//        .onAppear {
-//            initializeSpeech()
-//            startUsageTracking() // Start tracking usage time
 //        }
 //        .onDisappear {
 //            // Auto-pause when view disappears for any reason
@@ -3197,17 +3855,22 @@
 //    }
 //    
 //    private func updateProgress() {
-//        if let script = currentSavedScript {
-//            let updatedScript = SavedScript(
-//                id: script.id,
-//                title: script.title,
-//                rawText: script.rawText,
-//                settings: script.settings,
-//                progressIndex: currentUtteranceIndex,
-//                dateSaved: script.dateSaved
-//            )
-//            libraryManager.update(updatedScript)
-//            currentSavedScript = updatedScript
+//        guard currentSavedScript != nil else { return }
+//        
+//        let now = Date()
+//        let timeSinceLastSave = now.timeIntervalSince(lastSaveTime)
+//        
+//        // Only save if it's been at least 0.5 seconds since the last save
+//        if timeSinceLastSave >= 0.5 {
+//            performSave()
+//        } else {
+//            // Mark that we have a pending save and schedule it
+//            pendingSave = true
+//            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+//                if self.pendingSave {
+//                    self.performSave()
+//                }
+//            }
 //        }
 //    }
 //
@@ -3274,17 +3937,244 @@
 //        characterOptions[character]?.highlight.swiftUIColor ?? .gray
 //    }
 //    
+//    // MARK: - Navigation Helper Methods
+//
+//    private func handleBackFromScriptReading() {
+//        // Auto-pause speech when going back
+//        pauseSpeechForNavigation()
+//        
+//        if isLoadedScript {
+//            // For loaded scripts: just save progress and go back
+//            if currentSavedScript != nil {
+//                saveCurrentScript()
+//                print("💾 Saved loaded script progress")
+//            }
+//            isCharacterSelected = false
+//            isShowingStartingLineSelection = true
+//            print("⬅️ Loaded script: navigating back to starting line selection")
+//        } else {
+//            // For new scripts: preserve everything before going back
+//            print("⬅️ New script: preserving all settings before going back")
+//            isCharacterSelected = false
+//            isShowingStartingLineSelection = true
+//        }
+//    }
+//
+//    private func handleBackFromStartingLineSelection() {
+//        if isLoadedScript {
+//            // For loaded scripts: just go back to character customization
+//            isShowingStartingLineSelection = false
+//            print("⬅️ Loaded script: going back to character customization")
+//        } else {
+//            // For new scripts: go back to character customization
+//            isShowingStartingLineSelection = false
+//            print("⬅️ New script: going back to character customization")
+//        }
+//    }
+//
+//    private func handleContinueFromCharacterCustomization() {
+//        if isLoadedScript {
+//            // For loaded scripts: preserve the original starting line selection
+//            if selectedStartingLineIndex == nil {
+//                selectedStartingLineIndex = startingLineIndex
+//                print("🔒 Loaded script: restored starting line selection: \(startingLineIndex)")
+//            }
+//        } else {
+//            // For new scripts: preserve whatever starting line was set
+//            if selectedStartingLineIndex == nil && hasSetStartingLine {
+//                selectedStartingLineIndex = startingLineIndex
+//                print("📝 New script: preserved starting line selection: \(startingLineIndex)")
+//            }
+//        }
+//        isShowingStartingLineSelection = true
+//    }
+//    
+//    
+//    
+//    
+//    // MARK: - Library Helper Functions
+//    
+//    private func performSave() {
+//        guard let script = currentSavedScript else { return }
+//        
+//        let updatedScript = SavedScript(
+//            id: script.id,
+//            title: scriptName.isEmpty ? script.title : scriptName,
+//            rawText: script.rawText,
+//            settings: ScriptSettings(
+//                selectedCharacters: Array(selectedCharacters),
+//                displayLinesAsRead: displayLinesAsRead,
+//                displayMyLines: displayMyLines,
+//                showHints: showHints,
+//                startingLineIndex: startingLineIndex,
+//                characterOptions: characterOptions  // Add this line
+//            ),
+//            progressIndex: currentUtteranceIndex,
+//            dateSaved: Date()
+//        )
+//        
+//        libraryManager.update(updatedScript)
+//        currentSavedScript = updatedScript
+//        lastSaveTime = Date()
+//        pendingSave = false
+//        
+//        print("💾 Progress saved with character options")
+//    }
+//    
+//    private func loadScriptFromLibrary(_ script: SavedScript) {
+//        print("🚀 Loading script from library: \(script.title)")
+//        
+//        // Load script content
+//        fileContent = script.rawText
+//        uploadedFileName = script.title
+//        scriptName = script.title
+//        
+//        // Convert and extract dialogue
+//        let convertedScript = convertScriptToCorrectFormat(from: fileContent)
+//        dialogue = extractDialogue(from: convertedScript)
+//        characters = Array(Set(dialogue.map { $0.character })).sorted()
+//        
+//        // Load character options
+//        if !script.settings.characterOptions.isEmpty {
+//            characterOptions = script.settings.characterOptions
+//        } else {
+//            ensureCharacterOptions()
+//        }
+//        ensureCharacterOptions()
+//        
+//        // Load settings
+//        selectedCharacters = Set(script.settings.selectedCharacters)
+//        displayLinesAsRead = script.settings.displayLinesAsRead
+//        displayMyLines = script.settings.displayMyLines
+//        showHints = script.settings.showHints
+//        
+//        // Load progress and starting line
+//        startingLineIndex = script.settings.startingLineIndex
+//        currentUtteranceIndex = script.progressIndex
+//        hasSetStartingLine = true
+//        selectedStartingLineIndex = script.settings.startingLineIndex
+//        
+//        // Set as current saved script
+//        currentSavedScript = script
+//        
+//        // Set flag that this is a loaded script
+//        isLoadedScript = true
+//        
+//        // Set ALL navigation states required to reach scriptReadingView
+//        isShowingHomepage = false
+//        isShowingScriptLibrary = false
+//        hasUploadedFile = true
+//        hasPressedContinue = true
+//        isShowingCharacterCustomization = true
+//        isShowingStartingLineSelection = true
+//        isCharacterSelected = true
+//        
+//        updateHighlightColors()
+//        initializeSpeech()
+//        
+//        print("📖 Navigation state set - should go to script reading view")
+//        print("📖 isCharacterSelected: \(isCharacterSelected)")
+//        print("📖 isShowingStartingLineSelection: \(isShowingStartingLineSelection)")
+//    }
+//    
+//    private func getStartingLineInfo(_ script: SavedScript) -> (character: String, line: String) {
+//        let convertedScript = convertScriptToCorrectFormat(from: script.rawText)
+//        let scriptDialogue = extractDialogue(from: convertedScript)
+//        
+//        // Use the startingLineIndex from settings, not the progress index
+//        let startingIndex = script.settings.startingLineIndex
+//        
+//        if startingIndex < scriptDialogue.count {
+//            let entry = scriptDialogue[startingIndex]
+//            return (character: entry.character, line: entry.line)
+//        } else {
+//            return (character: "", line: "Beginning of script")
+//        }
+//    }
+//
+//    private func getCharacterNamesForScript(_ script: SavedScript) -> [String] {
+//        let convertedScript = convertScriptToCorrectFormat(from: script.rawText)
+//        let scriptDialogue = extractDialogue(from: convertedScript)
+//        return Array(Set(scriptDialogue.map { $0.character })).sorted()
+//    }
+//
+//    private func getCharacterDisplayName(_ characterName: String, selectedCharacters: [String], characterOptions: [String: CharacterOptions]) -> AttributedString {
+//        if selectedCharacters.contains("Just Listening") {
+//            var attributedString = AttributedString("Just Listening")
+//            attributedString.foregroundColor = .secondary
+//            return attributedString
+//        }
+//        
+//        if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(characterName) == .orderedSame }) {
+//            var attributedString = AttributedString(characterName.capitalized)
+//            if let color = characterOptions[characterName]?.highlight.swiftUIColor {
+//                attributedString.foregroundColor = Color(color)
+//            }
+//            return attributedString
+//        } else {
+//            var attributedString = AttributedString(characterName.capitalized)
+//            attributedString.foregroundColor = .secondary
+//            return attributedString
+//        }
+//    }
+//
+//    private func getProgressSnippet(_ script: SavedScript) -> [(character: String, line: String, isCurrentLine: Bool)] {
+//        let convertedScript = convertScriptToCorrectFormat(from: script.rawText)
+//        let scriptDialogue = extractDialogue(from: convertedScript)
+//        
+//        var snippet: [(character: String, line: String, isCurrentLine: Bool)] = []
+//        let progressIndex = script.progressIndex
+//        
+//        // Add line before (if exists)
+//        if progressIndex > 0 && progressIndex - 1 < scriptDialogue.count {
+//            let entry = scriptDialogue[progressIndex - 1]
+//            snippet.append((character: entry.character, line: entry.line, isCurrentLine: false))
+//        }
+//        
+//        // Add current line (if exists)
+//        if progressIndex < scriptDialogue.count {
+//            let entry = scriptDialogue[progressIndex]
+//            snippet.append((character: entry.character, line: entry.line, isCurrentLine: true))
+//        }
+//        
+//        // Add line after (if exists)
+//        if progressIndex + 1 < scriptDialogue.count {
+//            let entry = scriptDialogue[progressIndex + 1]
+//            snippet.append((character: entry.character, line: entry.line, isCurrentLine: false))
+//        }
+//        
+//        return snippet
+//    }
+//
+//    private func getColorForCharacterInScript(_ characterName: String, script: SavedScript) -> Color {
+//        // For library display, we'll use a simplified color system
+//        // since we don't have the full characterOptions loaded
+//        let selectedCharacters = script.settings.selectedCharacters
+//        
+//        if selectedCharacters.contains(where: { $0.caseInsensitiveCompare(characterName) == .orderedSame }) {
+//            // User's character - use a default highlight color
+//            return .blue.opacity(0.3)
+//        } else {
+//            // Non-user character - use gray
+//            return .gray.opacity(0.2)
+//        }
+//    }
+//    
+//    
 //    // MARK: - Library Integration Functions
 //    private func saveCurrentScript() {
 //        let settings = ScriptSettings(
 //            selectedCharacters: Array(selectedCharacters),
 //            displayLinesAsRead: displayLinesAsRead,
-//            displayMyLines: displayMyLines
+//            displayMyLines: displayMyLines,
+//            showHints: showHints,
+//            startingLineIndex: startingLineIndex,
+//            characterOptions: characterOptions  // Add this line
 //        )
 //        
 //        let script = SavedScript(
 //            id: currentSavedScript?.id ?? UUID(),
-//            title: uploadedFileName,
+//            title: scriptName.isEmpty ? uploadedFileName : scriptName,
 //            rawText: fileContent,
 //            settings: settings,
 //            progressIndex: currentUtteranceIndex,
@@ -3298,12 +4188,14 @@
 //        }
 //        
 //        currentSavedScript = script
+//        print("💾 Saved script with character options: \(characterOptions.keys)")
 //    }
 //    
 //    private func loadScript(from script: SavedScript) {
 //        // Load script content
 //        fileContent = script.rawText
 //        uploadedFileName = script.title
+//        scriptName = script.title  // Make sure script name is set
 //        
 //        // Convert and extract dialogue
 //        let convertedScript = convertScriptToCorrectFormat(from: fileContent)
@@ -3311,13 +4203,19 @@
 //        characters = Array(Set(dialogue.map { $0.character })).sorted()
 //        ensureCharacterOptions()
 //        
-//        // Load settings
+//        // Load settings - make sure selectedCharacters is properly set
 //        selectedCharacters = Set(script.settings.selectedCharacters)
 //        displayLinesAsRead = script.settings.displayLinesAsRead
 //        displayMyLines = script.settings.displayMyLines
+//        showHints = script.settings.showHints
+//        
+//        print("🔄 Loaded settings - selectedCharacters: \(selectedCharacters)")
+//        print("🔄 Script settings selectedCharacters: \(script.settings.selectedCharacters)")
 //        
 //        // Set progress
 //        currentUtteranceIndex = script.progressIndex
+//        startingLineIndex = script.progressIndex  // Make sure starting line is set
+//        hasSetStartingLine = true  // Make sure this flag is set
 //        
 //        // Update state
 //        currentSavedScript = script
@@ -3327,17 +4225,22 @@
 //        isCharacterSelected = true
 //        isShowingSplash = false
 //        
+//        // Make sure colors are updated after character selection
+//        updateHighlightColors()
+//        
 //        // Initialize speech if we're in the script reading view
 //        if isCharacterSelected {
 //            initializeSpeech()
 //        }
+//        
+//        print("📖 Loaded script from existing library system: \(script.title)")
 //    }
 //}
 //
 ///// Holds the per-character voice & highlight that the user chooses
-//struct CharacterOptions: Codable {
+//struct CharacterOptions: Codable, Equatable {  // Add Equatable here
 //    var voiceID: String
-//    var highlight: SerializableColor      // instead of Color
+//    var highlight: SerializableColor
 //}
 //// MARK: - AVSpeechSynthesizerDelegateWrapper
 //class AVSpeechSynthesizerDelegateWrapper: NSObject, AVSpeechSynthesizerDelegate {
